@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true">
+    <testsuites>
+        <!--
+            Unit tests touch no database and no framework: the domain is plain
+            PHP, so they run in milliseconds and can be kept honest. Feature
+            tests boot Laravel and hit Postgres.
+        -->
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+
+    <php>
+        <env name="APP_ENV" value="testing"/>
+
+        <!--
+            A fixed throwaway key, so the suite runs on a fresh clone without a
+            .env. It is not a secret: nothing encrypted with it outlives the
+            test run, and pinning it keeps the tests from depending on whatever
+            happens to be in the developer's environment.
+        -->
+        <env name="APP_KEY" value="base64:Nn0uZQzE0kZ0nQpQ0Xr7l0V1vJm3xK8sYt2bWc4dGfA="/>
+
+        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="DB_DATABASE" value="wob_test"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="SESSION_DRIVER" value="database"/>
+        <env name="GOOGLE_CLIENT_ID" value="test.apps.googleusercontent.com"/>
+
+        <!--
+            Shortest round-trip float formatting, which is what JavaScript does.
+            The content hash depends on it, so it is pinned rather than assumed.
+        -->
+        <ini name="serialize_precision" value="-1"/>
+    </php>
+</phpunit>

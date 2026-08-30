@@ -1,0 +1,23 @@
+{
+  "scalars": {
+    "sorted-keys": "2a48ec0e",
+    "empty-object": "5465b825",
+    "unicode": "0dd23b09",
+    "floats": "5d567912"
+  },
+  "levels": {
+    "lvl-tower": "fe75fce7",
+    "lvl-bridge": "0cafef51",
+    "lvl-lift": "f129c7d2",
+    "lvl-dig": "6c45a58e",
+    "lvl-hole": "88a41534",
+    "lvl-orbit": "b9dcf39f"
+  },
+  "chapters": {
+    "ch-basics": "efcf1c93",
+    "ch-tools": "a10fc7c7"
+  },
+  "stories": {
+    "story-first": "17d2ea9e"
+  }
+}

@@ -1,0 +1,2801 @@
+{
+  "version": 1,
+  "stories": [
+    {
+      "id": "story-first",
+      "title": "Первые шаги",
+      "cover": "linear-gradient(140deg,#3d5a3a,#16242b 70%)",
+      "chapters": [
+        "ch-basics",
+        "ch-tools"
+      ],
+      "hot": [
+        "as-anchor"
+      ]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "ch-basics",
+      "storyId": "story-first",
+      "title": "Основы",
+      "image": "linear-gradient(160deg,#243b2c,#0f1a20)",
+      "nodes": [
+        {
+          "levelId": "lvl-tower",
+          "x": 22,
+          "y": 62
+        },
+        {
+          "levelId": "lvl-bridge",
+          "x": 58,
+          "y": 38
+        }
+      ],
+      "edges": [
+        {
+          "from": "lvl-tower",
+          "to": "lvl-bridge"
+        }
+      ],
+      "hot": []
+    },
+    {
+      "id": "ch-tools",
+      "storyId": "story-first",
+      "title": "Инструменты",
+      "image": "linear-gradient(160deg,#2b3a4d,#0f1a20)",
+      "nodes": [
+        {
+          "levelId": "lvl-lift",
+          "x": 26,
+          "y": 58
+        },
+        {
+          "levelId": "lvl-dig",
+          "x": 66,
+          "y": 44
+        },
+        {
+          "levelId": "lvl-hole",
+          "x": 84,
+          "y": 66
+        },
+        {
+          "levelId": "lvl-orbit",
+          "x": 52,
+          "y": 80
+        }
+      ],
+      "edges": [
+        {
+          "from": "lvl-lift",
+          "to": "lvl-dig"
+        },
+        {
+          "from": "lvl-dig",
+          "to": "lvl-hole"
+        },
+        {
+          "from": "lvl-hole",
+          "to": "lvl-orbit"
+        }
+      ],
+      "hot": [
+        "as-balloon",
+        "as-sandbox"
+      ]
+    }
+  ],
+  "levels": [
+    {
+      "id": "lvl-tower",
+      "name": "Башня",
+      "width": 1600,
+      "height": 900,
+      "gravity": {
+        "x": 0,
+        "y": 1800
+      },
+      "goal": 5,
+      "entities": [
+        {
+          "id": "t1",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                780
+              ],
+              [
+                380,
+                780
+              ],
+              [
+                430,
+                820
+              ],
+              [
+                1180,
+                820
+              ],
+              [
+                1230,
+                780
+              ],
+              [
+                1600,
+                780
+              ],
+              [
+                1600,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.35,
+            "fill": "#2a3326",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "t2",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                60,
+                0
+              ],
+              [
+                60,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.9,
+            "fill": "#232a20",
+            "edge": "#3f4b34"
+          }
+        },
+        {
+          "id": "t3",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                1540,
+                0
+              ],
+              [
+                1600,
+                0
+              ],
+              [
+                1600,
+                900
+              ],
+              [
+                1540,
+                900
+              ]
+            ],
+            "smoothness": 0.9,
+            "fill": "#232a20",
+            "edge": "#3f4b34"
+          }
+        },
+        {
+          "id": "sb1",
+          "type": "system-ball",
+          "data": {
+            "x": 700,
+            "y": 803,
+            "r": 17,
+            "static": true,
+            "links": [
+              "sb2"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "sb2",
+          "type": "system-ball",
+          "data": {
+            "x": 790,
+            "y": 803,
+            "r": 17,
+            "static": true,
+            "links": [
+              "sb1"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "pp1",
+          "type": "pipe",
+          "data": {
+            "points": [
+              [
+                770,
+                180
+              ],
+              [
+                770,
+                70
+              ],
+              [
+                1300,
+                70
+              ]
+            ],
+            "radius": 30,
+            "power": 1,
+            "color": "#4c93c4",
+            "inner": "#0d1a24"
+          }
+        },
+        {
+          "id": "gb0",
+          "type": "game-ball",
+          "data": {
+            "x": 200,
+            "y": 755,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb1",
+          "type": "game-ball",
+          "data": {
+            "x": 250,
+            "y": 755,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb2",
+          "type": "game-ball",
+          "data": {
+            "x": 300,
+            "y": 755,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb3",
+          "type": "game-ball",
+          "data": {
+            "x": 180,
+            "y": 715,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb4",
+          "type": "game-ball",
+          "data": {
+            "x": 240,
+            "y": 715,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb5",
+          "type": "game-ball",
+          "data": {
+            "x": 300,
+            "y": 715,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb6",
+          "type": "game-ball",
+          "data": {
+            "x": 150,
+            "y": 675,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb7",
+          "type": "game-ball",
+          "data": {
+            "x": 210,
+            "y": 675,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb8",
+          "type": "game-ball",
+          "data": {
+            "x": 270,
+            "y": 675,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb9",
+          "type": "game-ball",
+          "data": {
+            "x": 330,
+            "y": 675,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb10",
+          "type": "game-ball",
+          "data": {
+            "x": 170,
+            "y": 635,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb11",
+          "type": "game-ball",
+          "data": {
+            "x": 230,
+            "y": 635,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb12",
+          "type": "game-ball",
+          "data": {
+            "x": 290,
+            "y": 635,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb13",
+          "type": "game-ball",
+          "data": {
+            "x": 350,
+            "y": 635,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        }
+      ],
+      "hot": []
+    },
+    {
+      "id": "lvl-bridge",
+      "name": "Пропасть",
+      "width": 1600,
+      "height": 900,
+      "gravity": {
+        "x": 0,
+        "y": 1800
+      },
+      "goal": 6,
+      "entities": [
+        {
+          "id": "t1",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                600
+              ],
+              [
+                500,
+                600
+              ],
+              [
+                520,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.35,
+            "fill": "#2a3326",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "t2",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                1080,
+                560
+              ],
+              [
+                1600,
+                560
+              ],
+              [
+                1600,
+                900
+              ],
+              [
+                1060,
+                900
+              ]
+            ],
+            "smoothness": 0.35,
+            "fill": "#2a3326",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "sb1",
+          "type": "system-ball",
+          "data": {
+            "x": 455,
+            "y": 583,
+            "r": 17,
+            "static": true,
+            "links": [
+              "sb2"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "sb2",
+          "type": "system-ball",
+          "data": {
+            "x": 380,
+            "y": 583,
+            "r": 17,
+            "static": true,
+            "links": [
+              "sb1"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "sb3",
+          "type": "system-ball",
+          "data": {
+            "x": 1120,
+            "y": 543,
+            "r": 17,
+            "static": true,
+            "links": [],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "pp1",
+          "type": "pipe",
+          "data": {
+            "points": [
+              [
+                1330,
+                470
+              ],
+              [
+                1330,
+                260
+              ],
+              [
+                1560,
+                260
+              ]
+            ],
+            "radius": 30,
+            "power": 1.4,
+            "color": "#4c93c4",
+            "inner": "#0d1a24"
+          }
+        },
+        {
+          "id": "gb0",
+          "type": "game-ball",
+          "data": {
+            "x": 120,
+            "y": 575,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb1",
+          "type": "game-ball",
+          "data": {
+            "x": 170,
+            "y": 575,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb2",
+          "type": "game-ball",
+          "data": {
+            "x": 220,
+            "y": 575,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb3",
+          "type": "game-ball",
+          "data": {
+            "x": 270,
+            "y": 575,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb4",
+          "type": "game-ball",
+          "data": {
+            "x": 100,
+            "y": 535,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb5",
+          "type": "game-ball",
+          "data": {
+            "x": 150,
+            "y": 535,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb6",
+          "type": "game-ball",
+          "data": {
+            "x": 200,
+            "y": 535,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb7",
+          "type": "game-ball",
+          "data": {
+            "x": 250,
+            "y": 535,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb8",
+          "type": "game-ball",
+          "data": {
+            "x": 300,
+            "y": 535,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb9",
+          "type": "game-ball",
+          "data": {
+            "x": 130,
+            "y": 495,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb10",
+          "type": "game-ball",
+          "data": {
+            "x": 180,
+            "y": 495,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb11",
+          "type": "game-ball",
+          "data": {
+            "x": 230,
+            "y": 495,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb12",
+          "type": "game-ball",
+          "data": {
+            "x": 280,
+            "y": 495,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb13",
+          "type": "game-ball",
+          "data": {
+            "x": 330,
+            "y": 495,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb14",
+          "type": "game-ball",
+          "data": {
+            "x": 160,
+            "y": 455,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "gb15",
+          "type": "game-ball",
+          "data": {
+            "x": 210,
+            "y": 455,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        }
+      ],
+      "hot": []
+    },
+    {
+      "id": "lvl-lift",
+      "name": "Подъём",
+      "width": 1600,
+      "height": 900,
+      "gravity": {
+        "x": 0,
+        "y": 1800
+      },
+      "goal": 4,
+      "entities": [
+        {
+          "id": "g",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                780
+              ],
+              [
+                1600,
+                780
+              ],
+              [
+                1600,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.35,
+            "fill": "#2a3326",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "wl",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                50,
+                0
+              ],
+              [
+                50,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.9,
+            "fill": "#232a20",
+            "edge": "#3f4b34"
+          }
+        },
+        {
+          "id": "wr",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                1550,
+                0
+              ],
+              [
+                1600,
+                0
+              ],
+              [
+                1600,
+                900
+              ],
+              [
+                1550,
+                900
+              ]
+            ],
+            "smoothness": 0.9,
+            "fill": "#232a20",
+            "edge": "#3f4b34"
+          }
+        },
+        {
+          "id": "slab",
+          "type": "object",
+          "data": {
+            "points": [
+              [
+                500,
+                742
+              ],
+              [
+                800,
+                742
+              ],
+              [
+                800,
+                780
+              ],
+              [
+                500,
+                780
+              ]
+            ],
+            "mass": 4,
+            "smoothness": 0.4,
+            "restitution": 0.1,
+            "static": false,
+            "fill": "#5c5346",
+            "edge": "#8d7f68"
+          }
+        },
+        {
+          "id": "s1",
+          "parent": "slab",
+          "type": "system-ball",
+          "data": {
+            "x": 560,
+            "y": 725,
+            "r": 17,
+            "static": true,
+            "links": [
+              "s2"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "s2",
+          "parent": "slab",
+          "type": "system-ball",
+          "data": {
+            "x": 740,
+            "y": 725,
+            "r": 17,
+            "static": true,
+            "links": [
+              "s1"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "pp",
+          "type": "pipe",
+          "data": {
+            "points": [
+              [
+                650,
+                300
+              ],
+              [
+                650,
+                120
+              ],
+              [
+                1480,
+                120
+              ]
+            ],
+            "radius": 30,
+            "power": 1.2,
+            "color": "#4c93c4",
+            "inner": "#0d1a24"
+          }
+        },
+        {
+          "id": "b0",
+          "type": "game-ball",
+          "data": {
+            "x": 170,
+            "y": 760,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "b1",
+          "type": "game-ball",
+          "data": {
+            "x": 220,
+            "y": 760,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "b2",
+          "type": "game-ball",
+          "data": {
+            "x": 270,
+            "y": 760,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "b3",
+          "type": "game-ball",
+          "data": {
+            "x": 320,
+            "y": 760,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "b4",
+          "type": "game-ball",
+          "data": {
+            "x": 200,
+            "y": 760,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "b5",
+          "type": "game-ball",
+          "data": {
+            "x": 250,
+            "y": 760,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "b6",
+          "type": "game-ball",
+          "data": {
+            "x": 300,
+            "y": 760,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "b7",
+          "type": "game-ball",
+          "data": {
+            "x": 980,
+            "y": 700,
+            "r": 12,
+            "mass": 1,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5",
+            "builtR": 26,
+            "builtMass": -5,
+            "anchorable": false
+          }
+        },
+        {
+          "id": "b8",
+          "type": "game-ball",
+          "data": {
+            "x": 1050,
+            "y": 700,
+            "r": 12,
+            "mass": 1,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5",
+            "builtR": 26,
+            "builtMass": -5,
+            "anchorable": false
+          }
+        },
+        {
+          "id": "b9",
+          "type": "game-ball",
+          "data": {
+            "x": 1120,
+            "y": 700,
+            "r": 12,
+            "mass": 1,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5",
+            "builtR": 26,
+            "builtMass": -5,
+            "anchorable": false
+          }
+        },
+        {
+          "id": "b10",
+          "type": "game-ball",
+          "data": {
+            "x": 1190,
+            "y": 700,
+            "r": 12,
+            "mass": 1,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5",
+            "builtR": 26,
+            "builtMass": -5,
+            "anchorable": false
+          }
+        },
+        {
+          "id": "b11",
+          "type": "game-ball",
+          "data": {
+            "x": 1260,
+            "y": 700,
+            "r": 12,
+            "mass": 1,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5",
+            "builtR": 26,
+            "builtMass": -5,
+            "anchorable": false
+          }
+        },
+        {
+          "id": "b12",
+          "type": "game-ball",
+          "data": {
+            "x": 1015,
+            "y": 700,
+            "r": 12,
+            "mass": 1,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5",
+            "builtR": 26,
+            "builtMass": -5,
+            "anchorable": false
+          }
+        },
+        {
+          "id": "b13",
+          "type": "game-ball",
+          "data": {
+            "x": 1085,
+            "y": 700,
+            "r": 12,
+            "mass": 1,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5",
+            "builtR": 26,
+            "builtMass": -5,
+            "anchorable": false
+          }
+        }
+      ],
+      "hot": []
+    },
+    {
+      "id": "lvl-dig",
+      "name": "Раскопки",
+      "width": 1600,
+      "height": 900,
+      "gravity": {
+        "x": 0,
+        "y": 1800
+      },
+      "goal": 4,
+      "entities": [
+        {
+          "id": "g",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                800
+              ],
+              [
+                1600,
+                800
+              ],
+              [
+                1600,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.35,
+            "fill": "#2a3326",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "wl",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                50,
+                0
+              ],
+              [
+                50,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.9,
+            "fill": "#232a20",
+            "edge": "#3f4b34"
+          }
+        },
+        {
+          "id": "wr",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                1550,
+                0
+              ],
+              [
+                1600,
+                0
+              ],
+              [
+                1600,
+                900
+              ],
+              [
+                1550,
+                900
+              ]
+            ],
+            "smoothness": 0.9,
+            "fill": "#232a20",
+            "edge": "#3f4b34"
+          }
+        },
+        {
+          "id": "sand",
+          "type": "sand",
+          "data": {
+            "points": [
+              [
+                620,
+                260
+              ],
+              [
+                820,
+                260
+              ],
+              [
+                820,
+                800
+              ],
+              [
+                620,
+                800
+              ]
+            ],
+            "polys": null,
+            "dig": 22,
+            "smoothness": 0.25,
+            "fill": "#c9a86a",
+            "edge": "#8a6f3e"
+          }
+        },
+        {
+          "id": "s1",
+          "type": "system-ball",
+          "data": {
+            "x": 940,
+            "y": 783,
+            "r": 17,
+            "static": true,
+            "links": [
+              "s2"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "s2",
+          "type": "system-ball",
+          "data": {
+            "x": 1030,
+            "y": 783,
+            "r": 17,
+            "static": true,
+            "links": [
+              "s1"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "pp",
+          "type": "pipe",
+          "data": {
+            "points": [
+              [
+                985,
+                430
+              ],
+              [
+                985,
+                180
+              ],
+              [
+                1480,
+                180
+              ]
+            ],
+            "radius": 30,
+            "power": 1.2,
+            "color": "#4c93c4",
+            "inner": "#0d1a24"
+          }
+        },
+        {
+          "id": "b0",
+          "type": "game-ball",
+          "data": {
+            "x": 150,
+            "y": 780,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b1",
+          "type": "game-ball",
+          "data": {
+            "x": 200,
+            "y": 780,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b2",
+          "type": "game-ball",
+          "data": {
+            "x": 250,
+            "y": 780,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b3",
+          "type": "game-ball",
+          "data": {
+            "x": 300,
+            "y": 780,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b4",
+          "type": "game-ball",
+          "data": {
+            "x": 180,
+            "y": 740,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b5",
+          "type": "game-ball",
+          "data": {
+            "x": 230,
+            "y": 740,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b6",
+          "type": "game-ball",
+          "data": {
+            "x": 280,
+            "y": 740,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b7",
+          "type": "game-ball",
+          "data": {
+            "x": 330,
+            "y": 740,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b8",
+          "type": "game-ball",
+          "data": {
+            "x": 160,
+            "y": 700,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b9",
+          "type": "game-ball",
+          "data": {
+            "x": 210,
+            "y": 700,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b10",
+          "type": "game-ball",
+          "data": {
+            "x": 260,
+            "y": 700,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        },
+        {
+          "id": "b11",
+          "type": "game-ball",
+          "data": {
+            "x": 310,
+            "y": 700,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": false,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c"
+          }
+        }
+      ],
+      "hot": []
+    },
+    {
+      "id": "lvl-hole",
+      "name": "Лунка",
+      "width": 2400,
+      "height": 900,
+      "gravity": {
+        "x": 0,
+        "y": 1800
+      },
+      "goal": 1,
+      "hot": [
+        "as-hole"
+      ],
+      "entities": [
+        {
+          "id": "t1",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                0,
+                300
+              ],
+              [
+                700,
+                300
+              ],
+              [
+                700,
+                900
+              ],
+              [
+                0,
+                900
+              ]
+            ],
+            "smoothness": 0.5,
+            "fill": "#2a3326",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "t2",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                700,
+                300
+              ],
+              [
+                1700,
+                730
+              ],
+              [
+                1700,
+                900
+              ],
+              [
+                700,
+                900
+              ]
+            ],
+            "smoothness": 0.96,
+            "fill": "#26333a",
+            "edge": "#7fb6cc"
+          }
+        },
+        {
+          "id": "sand",
+          "type": "sand",
+          "data": {
+            "points": [
+              [
+                700,
+                120
+              ],
+              [
+                960,
+                120
+              ],
+              [
+                960,
+                300
+              ],
+              [
+                700,
+                300
+              ]
+            ],
+            "polys": null,
+            "dig": 26,
+            "smoothness": 0.35,
+            "fill": "#c9a86a",
+            "edge": "#8a6f3e"
+          }
+        },
+        {
+          "id": "ball",
+          "type": "system-ball",
+          "data": {
+            "x": 830,
+            "y": 103,
+            "r": 17,
+            "static": false,
+            "links": [],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "hole",
+          "type": "hole",
+          "data": {
+            "x": 1950,
+            "y": 820,
+            "r": 19,
+            "depth": 26,
+            "counts": true,
+            "signal": "",
+            "color": "#4a5560",
+            "glow": "#8fb36a"
+          }
+        },
+        {
+          "id": "t3",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                1700,
+                730
+              ],
+              [
+                1918,
+                820
+              ],
+              [
+                1918,
+                900
+              ],
+              [
+                1700,
+                900
+              ]
+            ],
+            "smoothness": 1,
+            "fill": "#2f3a30",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "t5",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                1982,
+                820
+              ],
+              [
+                2280,
+                700
+              ],
+              [
+                2280,
+                900
+              ],
+              [
+                1982,
+                900
+              ]
+            ],
+            "smoothness": 1,
+            "fill": "#2f3a30",
+            "edge": "#66804f"
+          }
+        },
+        {
+          "id": "t4",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                2280,
+                400
+              ],
+              [
+                2400,
+                400
+              ],
+              [
+                2400,
+                900
+              ],
+              [
+                2280,
+                900
+              ]
+            ],
+            "smoothness": 0.3,
+            "fill": "#232a20",
+            "edge": "#3f4b34"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lvl-orbit",
+      "name": "Орбита",
+      "width": 1600,
+      "height": 900,
+      "gravity": {
+        "x": 0,
+        "y": 0
+      },
+      "goal": 5,
+      "entities": [
+        {
+          "id": "gw-planet",
+          "type": "gravity-well",
+          "data": {
+            "x": 620,
+            "y": 520,
+            "pull": 1700,
+            "radius": 200,
+            "falloff": 2,
+            "range": 0,
+            "solid": true,
+            "movable": false,
+            "signal": "",
+            "invert": false,
+            "lines": 14,
+            "smoothness": 0.4,
+            "color": "#8ea6ff",
+            "fill": "#2c3450"
+          }
+        },
+        {
+          "id": "gw-moon",
+          "type": "gravity-well",
+          "data": {
+            "x": 1280,
+            "y": 300,
+            "pull": 700,
+            "radius": 90,
+            "falloff": 2,
+            "range": 0,
+            "solid": true,
+            "movable": false,
+            "signal": "",
+            "invert": false,
+            "lines": 10,
+            "smoothness": 0.4,
+            "color": "#8ea6ff",
+            "fill": "#2c3450"
+          }
+        },
+        {
+          "id": "or-a1",
+          "type": "system-ball",
+          "data": {
+            "x": 818,
+            "y": 431,
+            "r": 17,
+            "static": true,
+            "links": [
+              "or-a2"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "or-a2",
+          "type": "system-ball",
+          "data": {
+            "x": 830,
+            "y": 464,
+            "r": 17,
+            "static": true,
+            "links": [
+              "or-a1"
+            ],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        },
+        {
+          "id": "or-pipe",
+          "type": "pipe",
+          "data": {
+            "points": [
+              [
+                1189,
+                330
+              ],
+              [
+                1420,
+                140
+              ],
+              [
+                1600,
+                80
+              ]
+            ],
+            "radius": 30,
+            "power": 1,
+            "color": "#4c93c4",
+            "inner": "#0d1a24"
+          }
+        },
+        {
+          "id": "or-b0",
+          "type": "game-ball",
+          "data": {
+            "x": 536,
+            "y": 719,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b1",
+          "type": "game-ball",
+          "data": {
+            "x": 484,
+            "y": 688,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b2",
+          "type": "game-ball",
+          "data": {
+            "x": 443,
+            "y": 644,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b3",
+          "type": "game-ball",
+          "data": {
+            "x": 416,
+            "y": 590,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b4",
+          "type": "game-ball",
+          "data": {
+            "x": 404,
+            "y": 531,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b5",
+          "type": "game-ball",
+          "data": {
+            "x": 410,
+            "y": 471,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b6",
+          "type": "game-ball",
+          "data": {
+            "x": 431,
+            "y": 415,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b7",
+          "type": "game-ball",
+          "data": {
+            "x": 524,
+            "y": 747,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b8",
+          "type": "game-ball",
+          "data": {
+            "x": 465,
+            "y": 711,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b9",
+          "type": "game-ball",
+          "data": {
+            "x": 419,
+            "y": 661,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b10",
+          "type": "game-ball",
+          "data": {
+            "x": 387,
+            "y": 600,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b11",
+          "type": "game-ball",
+          "data": {
+            "x": 374,
+            "y": 533,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b12",
+          "type": "game-ball",
+          "data": {
+            "x": 380,
+            "y": 464,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        },
+        {
+          "id": "or-b13",
+          "type": "game-ball",
+          "data": {
+            "x": 405,
+            "y": 400,
+            "r": 13,
+            "mass": 1,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#e2704a",
+            "linkColor": "#f0b48c",
+            "builtR": 13,
+            "builtMass": 1,
+            "anchorable": true
+          }
+        }
+      ],
+      "hot": []
+    }
+  ],
+  "assets": [
+    {
+      "id": "as-balloon",
+      "type": "game-ball",
+      "title": "Воздушный шарик",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "r": 12,
+        "builtR": 26,
+        "mass": 1,
+        "builtMass": -5,
+        "anchorable": false,
+        "asleep": false,
+        "minLinks": 1,
+        "maxLinks": 1,
+        "range": 165,
+        "jump": 470,
+        "speed": 95,
+        "dropMax": 190,
+        "color": "#9ad0e8",
+        "linkColor": "#cfe9f5"
+      }
+    },
+    {
+      "id": "as-sleeper",
+      "type": "game-ball",
+      "title": "Спящий шар",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "r": 13,
+        "builtR": 13,
+        "mass": 1,
+        "builtMass": 1,
+        "anchorable": true,
+        "asleep": true,
+        "minLinks": 2,
+        "maxLinks": 3,
+        "range": 165,
+        "jump": 470,
+        "speed": 95,
+        "dropMax": 190,
+        "color": "#b08a6a",
+        "linkColor": "#d8bb98"
+      }
+    },
+    {
+      "id": "as-anchor",
+      "type": "system-ball",
+      "title": "Опора",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "r": 17,
+        "static": true,
+        "links": [],
+        "color": "#d8cbb0",
+        "linkColor": "#b9ae95"
+      }
+    },
+    {
+      "id": "as-crate",
+      "type": "object",
+      "title": "Тяжёлый ящик",
+      "data": {
+        "points": [
+          [
+            -70,
+            -35
+          ],
+          [
+            70,
+            -35
+          ],
+          [
+            70,
+            35
+          ],
+          [
+            -70,
+            35
+          ]
+        ],
+        "mass": 8,
+        "smoothness": 0.4,
+        "restitution": 0.1,
+        "static": false,
+        "fill": "#5c5346",
+        "edge": "#8d7f68"
+      }
+    },
+    {
+      "id": "as-sandbox",
+      "type": "sand",
+      "title": "Куча песка",
+      "data": {
+        "points": [
+          [
+            -120,
+            -100
+          ],
+          [
+            120,
+            -100
+          ],
+          [
+            120,
+            100
+          ],
+          [
+            -120,
+            100
+          ]
+        ],
+        "polys": null,
+        "dig": 22,
+        "smoothness": 0.25,
+        "fill": "#c9a86a",
+        "edge": "#8a6f3e"
+      }
+    },
+    {
+      "id": "as-ice",
+      "type": "terrain",
+      "title": "Ледяной уступ",
+      "data": {
+        "points": [
+          [
+            -150,
+            -20
+          ],
+          [
+            150,
+            -20
+          ],
+          [
+            150,
+            20
+          ],
+          [
+            -150,
+            20
+          ]
+        ],
+        "smoothness": 0.95,
+        "fill": "#2b3f4a",
+        "edge": "#7fb6cc"
+      }
+    },
+    {
+      "id": "as-motor",
+      "type": "motor",
+      "title": "Двигатель",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "r": 26,
+        "hard": true,
+        "speed": 0.4,
+        "torque": 60,
+        "color": "#c58a4b"
+      }
+    },
+    {
+      "id": "as-hinge",
+      "type": "motor",
+      "title": "Шарнир (без мотора)",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "r": 22,
+        "hard": false,
+        "speed": 0,
+        "torque": 60,
+        "color": "#8fb36a"
+      }
+    },
+    {
+      "id": "as-hole",
+      "type": "hole",
+      "title": "Лунка",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "r": 19,
+        "depth": 26,
+        "counts": true,
+        "signal": "",
+        "color": "#4a5560",
+        "glow": "#8fb36a"
+      }
+    },
+    {
+      "id": "as-wind",
+      "type": "wind",
+      "title": "Ветер (порывистый)",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "ax": 320,
+        "ay": -40,
+        "bx": -160,
+        "by": 40,
+        "period": 3,
+        "force": 0.7,
+        "show": true,
+        "color": "#9fc6d8"
+      }
+    },
+    {
+      "id": "as-fan",
+      "type": "fan",
+      "title": "Вентилятор",
+      "data": {
+        "x": 0,
+        "y": 0,
+        "angle": -90,
+        "power": 520,
+        "nozzle": 46,
+        "cell": 22,
+        "push": 16,
+        "show": true,
+        "color": "#7fb6cc"
+      }
+    },
+    {
+      "id": "as-rails",
+      "type": "rails",
+      "title": "Рельсы",
+      "data": {
+        "points": [
+          [
+            -160,
+            0
+          ],
+          [
+            160,
+            0
+          ]
+        ],
+        "closed": false,
+        "segs": [
+          {
+            "speed": 140,
+            "wait": 1
+          }
+        ],
+        "color": "#8d93a1",
+        "show": true
+      }
+    }
+  ]
+}
