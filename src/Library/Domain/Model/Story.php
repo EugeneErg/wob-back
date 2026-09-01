@@ -311,12 +311,29 @@ final class Story extends AggregateRoot
      * The hasher is passed in rather than held, so the aggregate stays free of
      * dependencies and the fingerprint stays a pure function of content.
      */
+    /**
+     * The story's fingerprint.
+     *
+     * Titles land here — the story's own, and every chapter's — one level above
+     * the thing they name. A chapter title is not part of what that chapter is
+     * to play, so renaming it must not invalidate the records set on it; but it
+     * is a real change to the story, and this is where it registers. The same
+     * reasoning puts level names in the chapter fingerprint rather than the
+     * level's.
+     *
+     * The effect is a rename that costs exactly what it should: the story has a
+     * new version, the chapter and its levels do not, and nobody's times are
+     * thrown away over a spelling correction.
+     */
     public function contentHash(ContentHasher $hasher): ContentHash
     {
         return new ContentHash($hasher->hash([
             "id" => $this->id->value,
+            "title" => $this->title,
             "chapters" => array_map(
-                fn (Chapter $c): string => $c->id->value . ":" . $this->chapterHash($hasher, $c)->value,
+                fn (Chapter $c): string => $c->id->value
+                    . ":" . $this->chapterHash($hasher, $c)->value
+                    . ":" . $c->title(),
                 array_values($this->chapters),
             ),
         ]));
@@ -326,12 +343,15 @@ final class Story extends AggregateRoot
     {
         $levelHashes = [];
 
+        $levelNames = [];
+
         foreach ($chapter->levelIds() as $levelId) {
             $level = $this->levels[$levelId->value] ?? null;
             $levelHashes[$levelId->value] = $level === null ? "null" : $this->levelHash($hasher, $level)->value;
+            $levelNames[$levelId->value] = $level?->name() ?? '';
         }
 
-        return new ContentHash($hasher->hash($chapter->hashableContent($levelHashes)));
+        return new ContentHash($hasher->hash($chapter->hashableContent($levelHashes, $levelNames)));
     }
 
     public function levelHash(ContentHasher $hasher, Level $level): ContentHash

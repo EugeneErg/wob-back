@@ -204,10 +204,34 @@ final class Chapter
      *
      * @return array<string, mixed>
      */
-    public function hashableContent(array $levelHashes): array
+    /**
+     * Matches chapterHash() on the client.
+     *
+     * Level NAMES are counted here, not in the level's own fingerprint, and the
+     * placement is the whole point. A name is not a property of the puzzle — it
+     * is how the chapter introduces it — so renaming a level must not change
+     * what the level IS, or every record ever set on it would be invalidated by
+     * a typo fix. But the rename is still a real change to the chapter, and it
+     * has to be publishable and versioned somewhere. Here.
+     *
+     * The chapter's own title is deliberately absent for the same reason one
+     * level up: renaming a chapter is a change to the story, and it is counted
+     * in the story's fingerprint instead.
+     *
+     * The picture is not counted either, at any level. A new background changes
+     * how a chapter looks, not what it is to play.
+     *
+     * @param array<string, string> $levelHashes level id => level content hash
+     * @param array<string, string> $levelNames  level id => level name
+     *
+     * @return array<string, mixed>
+     */
+    public function hashableContent(array $levelHashes, array $levelNames = []): array
     {
         $levels = array_map(
-            static fn (MapNode $n): string => $n->levelId->value . ":" . ($levelHashes[$n->levelId->value] ?? "null"),
+            static fn (MapNode $n): string => $n->levelId->value
+                . ':' . ($levelHashes[$n->levelId->value] ?? 'null')
+                . ':' . ($levelNames[$n->levelId->value] ?? ''),
             $this->nodes,
         );
         $edges = array_map(static fn (MapEdge $e): string => $e->from->value . ">" . $e->to->value, $this->edges);

@@ -8,7 +8,7 @@ use Wob\Progress\Domain\Model\LevelCompletion;
 
 interface ProgressRepository
 {
-    public function find(string $userId, string $levelId): ?LevelCompletion;
+    public function find(string $userId, string $levelId, ?string $slotId = null): ?LevelCompletion;
 
     /** @return list<LevelCompletion> */
     public function of(string $userId): array;

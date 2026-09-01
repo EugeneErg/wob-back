@@ -10,6 +10,15 @@ return [
         "client_id" => env("GOOGLE_CLIENT_ID", ""),
     ],
 
+    "verifier" => [
+        // Where the Node service that replays runs is listening.
+        //
+        // Empty means runs are stored and never checked — and the leaderboard
+        // then says "unverified" next to every time, which is the truth rather
+        // than a degraded mode pretending to be fine.
+        "endpoint" => env("WOB_VERIFIER_URL", ""),
+    ],
+
     "library" => [
         // A level is a single JSON document and can be genuinely large once a
         // sand field has been dug through. Big enough to never bite an author,

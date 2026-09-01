@@ -157,7 +157,11 @@ final class GoogleIdTokenVerifierTest extends TestCase
             $this->httpClient($responses ?? [$this->jwksResponse()]),
             new HttpFactory(),
             new Repository(new ArrayStore()),
-            'https://example.test/certs',
+            // Named, not positional. The logger sits between the cache and the
+            // JWKS url, and passing the url fifth quietly aimed these tests at
+            // the real googleapis.com — they would have passed or failed on
+            // whether the sandbox had a network.
+            jwksUri: 'https://example.test/certs',
         );
     }
 

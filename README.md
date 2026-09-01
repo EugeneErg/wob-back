@@ -17,9 +17,20 @@ cp .env.example .env && php artisan key:generate
 createuser wob --pwprompt && createdb -O wob wob && createdb -O wob wob_test
 php artisan migrate
 
-php artisan serve
+php artisan serve       # then open http://localhost:8000/
 composer check          # phpstan, then phpstan level 8 on the domain, then phpunit
 ```
+
+There is no website here — the game is a separate Vue application. But `/` is not
+empty: it answers with the service name and the list of endpoints, and it does so
+without touching the session or the database. A bare 404 at the root would look
+identical whether the app booted fine and simply has no home page, or the
+document root is pointing at the project folder instead of `public/` — which is
+the usual cause and costs an hour. `/up` is the health check.
+
+Everything except `POST /api/auth/google` needs a session cookie, so an
+unauthenticated `GET /api/library` answers `401` with a JSON error, not a login
+page.
 
 Verified on PHP 8.3.6, Laravel 13.29, PostgreSQL 16.15: 41 tests, 196
 assertions, phpstan clean. The feature suite runs against a real Postgres rather

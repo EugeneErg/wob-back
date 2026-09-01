@@ -21,15 +21,21 @@ final class LevelCompletion
     public function __construct(
         public readonly string $userId,
         public readonly string $levelId,
+        /**
+         * Which run this belongs to, or null for progress that belongs to the
+         * player rather than to any particular run — everything recorded before
+         * slots existed.
+         */
+        public readonly ?string $slotId,
         public readonly DateTimeImmutable $firstCompletedAt,
         private DateTimeImmutable $lastCompletedAt,
         private int $completions,
     ) {
     }
 
-    public static function first(string $userId, string $levelId, DateTimeImmutable $at): self
+    public static function first(string $userId, string $levelId, ?string $slotId, DateTimeImmutable $at): self
     {
-        return new self($userId, $levelId, $at, $at, 1);
+        return new self($userId, $levelId, $slotId, $at, $at, 1);
     }
 
     public function again(DateTimeImmutable $at): void

@@ -30,7 +30,7 @@ final readonly class CompleteLevelHandler
 
     public function __invoke(CompleteLevel $command): LevelCompletion
     {
-        $existing = $this->progress->find($command->userId, $command->levelId);
+        $existing = $this->progress->find($command->userId, $command->levelId, $command->slotId);
 
         if ($existing !== null) {
             $existing->again($this->clock->now());
@@ -39,7 +39,12 @@ final readonly class CompleteLevelHandler
             return $existing;
         }
 
-        $completion = LevelCompletion::first($command->userId, $command->levelId, $this->clock->now());
+        $completion = LevelCompletion::first(
+            $command->userId,
+            $command->levelId,
+            $command->slotId,
+            $this->clock->now(),
+        );
         $this->progress->save($completion);
 
         return $completion;

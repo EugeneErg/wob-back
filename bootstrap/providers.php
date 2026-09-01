@@ -12,4 +12,6 @@ return [
     Wob\Identity\Infrastructure\Laravel\IdentityServiceProvider::class,
     Wob\Library\Infrastructure\Laravel\LibraryServiceProvider::class,
     Wob\Progress\Infrastructure\Laravel\ProgressServiceProvider::class,
+    Wob\Publishing\Infrastructure\Laravel\PublishingServiceProvider::class,
+    Wob\Achievements\Infrastructure\Laravel\AchievementsServiceProvider::class,
 ];

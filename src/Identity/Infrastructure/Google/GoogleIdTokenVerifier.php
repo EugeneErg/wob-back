@@ -8,6 +8,7 @@ use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Psr\Log\LoggerInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Throwable;
@@ -44,6 +45,17 @@ final readonly class GoogleIdTokenVerifier implements GoogleIdentityVerifier
         private ClientInterface $http,
         private RequestFactoryInterface $requests,
         private Cache $cache,
+        /**
+         * Where the real reason goes.
+         *
+         * The response says one bland thing on purpose — an exact reason is a
+         * free oracle for whoever is probing — so without somewhere to write
+         * the truth, a refused sign-in is undiagnosable. That is not
+         * hypothetical: a PHP install with no CA bundle refuses every token
+         * with a message about verification, and the actual cause is a cURL
+         * error nobody can see.
+         */
+        private ?LoggerInterface $log = null,
         private string $jwksUri = 'https://www.googleapis.com/oauth2/v3/certs',
         private int $cacheSeconds = 3600,
     ) {
@@ -58,12 +70,20 @@ final readonly class GoogleIdTokenVerifier implements GoogleIdentityVerifier
         $claims = $this->decode($credential);
 
         if (!in_array($claims->iss ?? '', self::ISSUERS, true)) {
-            throw AuthenticationFailed::because('Google sign-in could not be verified');
+            $this->refuse('issuer is not Google', ['iss' => $claims->iss ?? null]);
         }
 
         $audience = $claims->aud ?? null;
 
         if (!is_string($audience) || !hash_equals($this->clientId, $audience)) {
+            // This one gets its own message even in the response. It is not a
+            // forgery, it is the two halves of the app holding different client
+            // ids — and saying so saves an afternoon.
+            $this->log?->warning('Google sign-in rejected: wrong audience', [
+                'expected' => $this->clientId,
+                'received' => is_string($audience) ? $audience : gettype($audience),
+            ]);
+
             throw AuthenticationFailed::because('This sign-in was issued for a different application');
         }
 
@@ -71,7 +91,7 @@ final readonly class GoogleIdTokenVerifier implements GoogleIdentityVerifier
         $email = $claims->email ?? null;
 
         if (!is_string($subject) || $subject === '' || !is_string($email) || $email === '') {
-            throw AuthenticationFailed::because('Google sign-in could not be verified');
+            $this->refuse('token carries no subject or email');
         }
 
         return new GoogleIdentity(
@@ -85,9 +105,15 @@ final readonly class GoogleIdTokenVerifier implements GoogleIdentityVerifier
 
     private function decode(string $credential): object
     {
+        // A minute of slack on iat and nbf. Not laxity: the check is against
+        // OUR clock, and a container whose time has drifted a few seconds
+        // rejects every genuine token with an error that says nothing about
+        // clocks. Expiry is still enforced.
+        JWT::$leeway = 60;
+
         try {
             return JWT::decode($credential, $this->keys(refresh: false));
-        } catch (Throwable) {
+        } catch (Throwable $first) {
             // Google rotates signing keys every few hours. A token signed with a
             // key minted since the last fetch is not a forgery, it is a cache
             // miss, so one refresh is allowed before giving up. Without this,
@@ -95,11 +121,15 @@ final readonly class GoogleIdTokenVerifier implements GoogleIdentityVerifier
             // happens to expire.
             try {
                 return JWT::decode($credential, $this->keys(refresh: true));
-            } catch (Throwable) {
-                // The reason is deliberately not passed on. Telling a caller
-                // exactly why a token failed is a free oracle for forging the
-                // next one.
-                throw AuthenticationFailed::because('Google sign-in could not be verified');
+            } catch (Throwable $second) {
+                // The caller is told nothing: an exact reason is a free oracle
+                // for forging the next attempt. The operator is told
+                // everything, because a failure nobody can diagnose is a
+                // failure that never gets fixed.
+                $this->refuse('token did not verify', [
+                    'firstAttempt' => $first::class . ': ' . $first->getMessage(),
+                    'afterKeyRefresh' => $second::class . ': ' . $second->getMessage(),
+                ]);
             }
         }
     }
@@ -126,11 +156,30 @@ final readonly class GoogleIdTokenVerifier implements GoogleIdentityVerifier
         return JWK::parseKeySet($jwks);
     }
 
+    /**
+     * Refuse: loudly in the log, blandly in the response.
+     *
+     * @param array<string, mixed> $context
+     *
+     * @throws AuthenticationFailed
+     */
+    private function refuse(string $reason, array $context = []): never
+    {
+        $this->log?->warning('Google sign-in rejected: ' . $reason, $context);
+
+        throw AuthenticationFailed::because('Google sign-in could not be verified');
+    }
+
     private function fetchJwks(): string
     {
         $response = $this->http->sendRequest($this->requests->createRequest('GET', $this->jwksUri));
 
         if ($response->getStatusCode() !== 200) {
+            $this->log?->error('Could not fetch Google signing keys', [
+                'uri' => $this->jwksUri,
+                'status' => $response->getStatusCode(),
+            ]);
+
             throw AuthenticationFailed::because('Google sign-in is temporarily unavailable');
         }
 

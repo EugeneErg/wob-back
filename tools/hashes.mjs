@@ -38,15 +38,23 @@ const levelHash = (l) => {
   return fnv(stable({ id, width, height, gravity, goal, entities }));
 };
 
+// Level names count towards the CHAPTER, and chapter titles towards the STORY:
+// a name belongs one level above the thing it names, so renaming never
+// invalidates the records set on the thing itself.
 const chapterHash = (ch) => {
   if (!ch) return null;
-  const levels = ch.nodes.map((n) => `${n.levelId}:${levelHash(level(n.levelId))}`).sort();
+  const levels = ch.nodes
+    .map((n) => `${n.levelId}:${levelHash(level(n.levelId))}:${level(n.levelId)?.name ?? ""}`)
+    .sort();
   const edges = ch.edges.map((e) => `${e.from}>${e.to}`).sort();
   return fnv(stable({ id: ch.id, levels, edges }));
 };
 
-const storyHash = (s) =>
-  s ? fnv(stable({ id: s.id, chapters: s.chapters.map((c) => `${c}:${chapterHash(chapter(c))}`) })) : null;
+const storyHash = (s) => {
+  if (!s) return null;
+  const chapters = s.chapters.map((c) => `${c}:${chapterHash(chapter(c))}:${chapter(c)?.title ?? ""}`);
+  return fnv(stable({ id: s.id, title: s.title, chapters }));
+};
 
 const out = { scalars: {}, levels: {}, chapters: {}, stories: {} };
 

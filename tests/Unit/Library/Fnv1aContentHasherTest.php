@@ -6,6 +6,18 @@ namespace Wob\Tests\Unit\Library;
 
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Wob\Library\Domain\Model\Chapter;
+use Wob\Library\Domain\Model\Level;
+use Wob\Library\Domain\Model\Story;
+use Wob\Library\Domain\ValueObject\ChapterId;
+use Wob\Library\Domain\ValueObject\Dimensions;
+use Wob\Library\Domain\ValueObject\EntityPlacement;
+use Wob\Library\Domain\ValueObject\Gravity;
+use Wob\Library\Domain\ValueObject\LevelId;
+use Wob\Library\Domain\ValueObject\MapEdge;
+use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\OwnerId;
+use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Library\Infrastructure\Hashing\Fnv1aContentHasher;
 
 /**
@@ -133,33 +145,123 @@ final class Fnv1aContentHasherTest extends TestCase
         }
     }
 
-    public function testEveryBuiltInChapterHashesLikeTheClient(): void
+    /**
+     * Chapter and story fingerprints, taken from the domain itself.
+     *
+     * The earlier version of this test rebuilt the JavaScript formula in PHP
+     * and compared that against the fixture — which passed happily while
+     * Chapter::hashableContent() drifted, because the domain was never called.
+     * A parity test that reimplements the thing it is checking is not a parity
+     * test. This one builds a real Story and asks it.
+     */
+    public function testTheDomainProducesTheSameChapterAndStoryHashesAsTheClient(): void
     {
-        $levelHashes = [];
-
-        foreach ($this->library->levels as $level) {
-            $levelHashes[$level->id] = $this->expected['levels'][$level->id];
-        }
+        $hasher = new Fnv1aContentHasher();
+        $story = $this->builtInStory();
 
         foreach ($this->library->chapters as $chapter) {
-            $levels = array_map(
-                static fn (stdClass $n): string => $n->levelId . ':' . ($levelHashes[$n->levelId] ?? 'null'),
-                $chapter->nodes,
-            );
-            $edges = array_map(
-                static fn (stdClass $e): string => $e->from . '>' . $e->to,
-                $chapter->edges,
-            );
-
-            sort($levels, SORT_STRING);
-            sort($edges, SORT_STRING);
-
             self::assertSame(
                 $this->expected['chapters'][$chapter->id],
-                $this->hasher->hash((object) ['id' => $chapter->id, 'levels' => $levels, 'edges' => $edges]),
+                $story->chapterHash($hasher, $story->chapter(new ChapterId($chapter->id)))->value,
                 sprintf('Chapter %s disagrees with the client', $chapter->id),
             );
         }
+
+        self::assertSame(
+            $this->expected['stories']['story-first'],
+            $story->contentHash($hasher)->value,
+            'The story fingerprint disagrees with the client',
+        );
+    }
+
+    /**
+     * Renaming is the case the whole placement of names exists for: the story
+     * gets a new version, and the level nobody touched keeps its fingerprint —
+     * so every record ever set on it survives a typo fix.
+     */
+    public function testRenamingALevelMovesTheChapterAndStoryButNotTheLevel(): void
+    {
+        $hasher = new Fnv1aContentHasher();
+        $story = $this->builtInStory();
+
+        $levelId = new LevelId('lvl-tower');
+        $chapterId = new ChapterId('ch-basics');
+
+        $levelBefore = $story->levelHash($hasher, $story->level($levelId))->value;
+        $chapterBefore = $story->chapterHash($hasher, $story->chapter($chapterId))->value;
+        $storyBefore = $story->contentHash($hasher)->value;
+
+        $story->level($levelId)->rename('A completely different name');
+
+        self::assertSame($levelBefore, $story->levelHash($hasher, $story->level($levelId))->value);
+        self::assertNotSame($chapterBefore, $story->chapterHash($hasher, $story->chapter($chapterId))->value);
+        self::assertNotSame($storyBefore, $story->contentHash($hasher)->value);
+    }
+
+    /** And one level up: renaming a chapter is a change to the story alone. */
+    public function testRenamingAChapterMovesOnlyTheStory(): void
+    {
+        $hasher = new Fnv1aContentHasher();
+        $story = $this->builtInStory();
+        $chapterId = new ChapterId('ch-basics');
+
+        $chapterBefore = $story->chapterHash($hasher, $story->chapter($chapterId))->value;
+        $storyBefore = $story->contentHash($hasher)->value;
+
+        $story->chapter($chapterId)->rename('Renamed chapter');
+
+        self::assertSame($chapterBefore, $story->chapterHash($hasher, $story->chapter($chapterId))->value);
+        self::assertNotSame($storyBefore, $story->contentHash($hasher)->value);
+    }
+
+    private function builtInStory(): Story
+    {
+        $levels = [];
+
+        foreach ($this->library->levels as $raw) {
+            $levels[] = new Level(
+                new LevelId($raw->id),
+                $raw->name,
+                new Dimensions((int) $raw->width, (int) $raw->height),
+                Gravity::fromArray((array) $raw->gravity),
+                (int) $raw->goal,
+                array_map(EntityPlacement::fromObject(...), $raw->entities),
+            );
+        }
+
+        $chapters = [];
+
+        foreach ($this->library->chapters as $raw) {
+            $chapters[] = new Chapter(
+                new ChapterId($raw->id),
+                $raw->title,
+                $raw->image ?? '',
+                array_map(
+                    static fn (stdClass $n): MapNode => new MapNode(
+                        new LevelId($n->levelId),
+                        (float) $n->x,
+                        (float) $n->y,
+                        isset($n->next) ? new ChapterId($n->next) : null,
+                    ),
+                    $raw->nodes,
+                ),
+                array_map(
+                    static fn (stdClass $e): MapEdge => new MapEdge(new LevelId($e->from), new LevelId($e->to)),
+                    $raw->edges,
+                ),
+            );
+        }
+
+        $storyRaw = $this->library->stories[0];
+
+        return new Story(
+            new StoryId($storyRaw->id),
+            new OwnerId('3f2504e0-4f89-41d3-9a0c-0305e82c3301'),
+            $storyRaw->title,
+            $storyRaw->cover ?? '',
+            $chapters,
+            $levels,
+        );
     }
 
     /**

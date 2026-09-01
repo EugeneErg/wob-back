@@ -22,4 +22,16 @@ interface ContentHasher
      * @return string eight lowercase hex characters
      */
     public function hash(array|object $content): string;
+
+    /**
+     * The canonical string a hash would be taken of.
+     *
+     * Part of the contract rather than an implementation detail, because
+     * normalising content is useful on its own: comparing two snapshots for
+     * equality, or measuring how far apart two versions of a level are, both
+     * need the same "key order and number formatting do not count" rule that
+     * the hash relies on. Re-deriving that rule elsewhere would be a second
+     * definition of what content IS, free to drift from the first.
+     */
+    public function canonicalise(mixed $value): string;
 }
