@@ -8,7 +8,9 @@ use Wob\Identity\Presentation\Http\Middleware\ResolveDomainUser;
 use Wob\Library\Presentation\Http\Controller\BundleController;
 use Wob\Library\Presentation\Http\Controller\ChapterController;
 use Wob\Library\Presentation\Http\Controller\LevelController;
+use Wob\Library\Presentation\Http\Controller\AssetController;
 use Wob\Library\Presentation\Http\Controller\StoryController;
+use Wob\Media\Presentation\Http\Controller\MediaController;
 use Wob\Progress\Presentation\Http\Controller\ProgressController;
 use Wob\Achievements\Presentation\Http\Controller\AwardController;
 use Wob\Publishing\Presentation\Http\Controller\CatalogController;
@@ -45,6 +47,21 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
     Route::get("auth/me", [AuthController::class, "me"]);
     Route::post("auth/logout", [AuthController::class, "signOut"]);
 
+    // Covers and intros. Uploaded once, then referred to by id from a story,
+    // a chapter or a level — the bytes never travel inside a bundle, which is
+    // the entire reason this exists: a library export is a document, and a
+    // sixty-megabyte video base64ed into it is not.
+    Route::post("media", [MediaController::class, "upload"]);
+    Route::get("media", [MediaController::class, "index"]);
+    Route::get("media/{id}", [MediaController::class, "show"]);
+
+    // The author's shelf of reusable pieces. Owned by them, not by any one
+    // story, and shared across everything they make.
+    Route::get("assets", [AssetController::class, "index"]);
+    Route::post("assets", [AssetController::class, "store"]);
+    Route::patch("assets/{assetId}", [AssetController::class, "update"]);
+    Route::delete("assets/{assetId}", [AssetController::class, "destroy"]);
+
     Route::get("library", [StoryController::class, "shelf"]);
 
     // Files. Import is how a library that has lived in localStorage since the
@@ -65,6 +82,7 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
     Route::delete("stories/{storyId}/chapters/{chapterId}", [ChapterController::class, "destroy"]);
 
     Route::post("stories/{storyId}/levels", [LevelController::class, "create"]);
+    Route::post("stories/{storyId}/points", [LevelController::class, "pin"]);
     Route::put("stories/{storyId}/levels/{levelId}", [LevelController::class, "save"]);
     Route::delete("stories/{storyId}/chapters/{chapterId}/levels/{levelId}", [LevelController::class, "destroy"]);
 

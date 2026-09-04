@@ -12,6 +12,7 @@ use Wob\Library\Application\Command\SaveChapterMap;
 use Wob\Library\Application\Handler\CreateChapterHandler;
 use Wob\Library\Application\Handler\DeleteChapterHandler;
 use Wob\Library\Application\Handler\SaveChapterMapHandler;
+use Wob\Library\Domain\Service\IdGenerator;
 
 final readonly class ChapterController
 {
@@ -19,28 +20,31 @@ final readonly class ChapterController
         private CreateChapterHandler $create,
         private SaveChapterMapHandler $saveMap,
         private DeleteChapterHandler $delete,
+        private IdGenerator $ids,
     ) {
     }
 
     public function create(Request $request, string $storyId): JsonResponse
     {
         $data = $request->validate([
-            "id" => ["required", "string", "max:64"],
             "title" => ["required", "string", "max:200"],
             "image" => ["required", "string", "max:2000"],
             "version" => ["required", "integer", "min:0"],
         ]);
 
+        // Имя выдаёт сервер и возвращает его клиенту.
+        $chapterId = $this->ids->next("ch");
+
         $story = ($this->create)(new CreateChapter(
             $this->owner($request),
             $storyId,
-            $data["id"],
+            $chapterId,
             $data["title"],
             $data["image"],
             (int) $data["version"],
         ));
 
-        return new JsonResponse(["id" => $data["id"], "version" => $story->version()], 201);
+        return new JsonResponse(["id" => $chapterId, "version" => $story->version()], 201);
     }
 
     public function saveMap(Request $request, string $storyId, string $chapterId): JsonResponse
@@ -48,14 +52,22 @@ final readonly class ChapterController
         $data = $request->validate([
             "title" => ["nullable", "string", "max:200"],
             "image" => ["nullable", "string", "max:2000"],
+            "map" => ["nullable", "string", "max:2000"],
+            "canvas" => ["nullable", "array"],
+            "canvas.x" => ["required_with:canvas", "numeric"],
+            "canvas.y" => ["required_with:canvas", "numeric"],
+            "canvas.w" => ["required_with:canvas", "numeric"],
+            "canvas.h" => ["required_with:canvas", "numeric"],
             "nodes" => ["present", "array"],
+            "nodes.*.id" => ["nullable", "string", "max:64"],
             "nodes.*.levelId" => ["required", "string", "max:64"],
+            "nodes.*.name" => ["nullable", "string", "max:200"],
+            "nodes.*.image" => ["nullable", "string", "max:2000"],
+            "nodes.*.outro" => ["nullable", "string", "max:2000"],
             "nodes.*.x" => ["required", "numeric", "between:0,100"],
             "nodes.*.y" => ["required", "numeric", "between:0,100"],
-            "nodes.*.next" => ["nullable", "string", "max:64"],
-            "edges" => ["present", "array"],
-            "edges.*.from" => ["required", "string", "max:64"],
-            "edges.*.to" => ["required", "string", "max:64"],
+            "nodes.*.next" => ["nullable", "array"],
+            "nodes.*.next.*" => ["string", "max:64"],
             "version" => ["required", "integer", "min:0"],
         ]);
 
@@ -66,8 +78,9 @@ final readonly class ChapterController
             $data["title"] ?? null,
             $data["image"] ?? null,
             $data["nodes"],
-            $data["edges"],
             (int) $data["version"],
+            $data["map"] ?? null,
+            $data["canvas"] ?? null,
         ));
 
         return new JsonResponse(["id" => $chapterId, "version" => $story->version()]);

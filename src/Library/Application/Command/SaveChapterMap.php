@@ -14,7 +14,6 @@ final readonly class SaveChapterMap
 {
     /**
      * @param list<array{levelId: string, x: float|int, y: float|int, next?: ?string}> $nodes
-     * @param list<array{from: string, to: string}>                                    $edges
      */
     public function __construct(
         public string $ownerId,
@@ -23,8 +22,11 @@ final readonly class SaveChapterMap
         public ?string $title,
         public ?string $image,
         public array $nodes,
-        public array $edges,
         public int $expectedVersion,
+        public ?string $map = null,
+
+        /** @var array{x: float, y: float, w: float, h: float}|null */
+        public ?array $canvas = null,
     ) {
     }
 }

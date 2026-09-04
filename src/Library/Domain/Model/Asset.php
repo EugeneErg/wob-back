@@ -4,14 +4,26 @@ declare(strict_types=1);
 
 namespace Wob\Library\Domain\Model;
 
-use stdClass;
 use Wob\Library\Domain\ValueObject\AssetId;
+use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Shared\Domain\Exception\InvariantViolation;
 use Wob\Shared\Domain\AggregateRoot;
 
 /**
- * A saved entity setting: a type plus the data that entity calls its own.
+ * A saved piece of a level: one entity or a whole group of them.
+ *
+ * It held a single entity at first, which made the common case awkward. Things
+ * an author wants to reuse are rarely one entity — a motor with the arm it
+ * turns, a hazard with the terrain it sits in — and saving them one at a time
+ * loses the arrangement, which was the part worth keeping. So an asset is a
+ * list, and a single entity is simply a list of one.
+ *
+ * The list is stored as placements, exactly as a level stores them, so dropping
+ * an asset into a level is a copy rather than a translation. Entity ids inside
+ * it are the author's own; whoever drops the asset in is responsible for making
+ * them unique in the level, the same way importing a bundle rewrites colliding
+ * ids rather than trusting them.
  *
  * An aggregate root of its own, not a part of Story, because the shelf is
  * per-author and shared across their stories — createAsset() on the client
@@ -27,18 +39,31 @@ use Wob\Shared\Domain\AggregateRoot;
  */
 final class Asset extends AggregateRoot
 {
+    /** @param list<EntityPlacement> $entities */
     public function __construct(
         public readonly AssetId $id,
         public readonly OwnerId $ownerId,
-        public readonly string $type,
         private string $title,
-        private stdClass $data,
+        private array $entities,
     ) {
-        if (preg_match("/^[a-z0-9-]{1,64}$/", $type) !== 1) {
-            throw InvariantViolation::because(sprintf("Asset type \"%s\" is not a valid type name", $type));
-        }
-
         $this->rename($title);
+        $this->replaceEntities($entities);
+    }
+
+    /**
+     * What kinds of entity are inside.
+     *
+     * The palette groups by this, and a group of several types belongs under
+     * all of them: an author looking for the motor finds the motor-with-arm.
+     *
+     * @return list<string>
+     */
+    public function types(): array
+    {
+        return array_values(array_unique(array_map(
+            static fn (EntityPlacement $e): string => $e->type,
+            $this->entities,
+        )));
     }
 
     public function title(): string
@@ -46,9 +71,10 @@ final class Asset extends AggregateRoot
         return $this->title;
     }
 
-    public function data(): stdClass
+    /** @return list<EntityPlacement> */
+    public function entities(): array
     {
-        return $this->data;
+        return $this->entities;
     }
 
     public function rename(string $title): void
@@ -62,8 +88,38 @@ final class Asset extends AggregateRoot
         $this->title = $title;
     }
 
-    public function replaceData(stdClass $data): void
+    /** @param list<EntityPlacement> $entities */
+    public function replaceEntities(array $entities): void
     {
-        $this->data = $data;
+        if ($entities === []) {
+            throw InvariantViolation::because("An asset must hold at least one entity");
+        }
+
+        $seen = [];
+
+        foreach ($entities as $entity) {
+            if (isset($seen[$entity->id])) {
+                throw InvariantViolation::because(
+                    sprintf("Entity %s appears twice in this asset", $entity->id),
+                );
+            }
+
+            $seen[$entity->id] = true;
+        }
+
+        // A child whose parent was left out would arrive in a level attached to
+        // nothing. Saving half an arrangement is the one thing this must not do
+        // — the arrangement is what an author saved it for.
+        foreach ($entities as $entity) {
+            if ($entity->parent !== null && !isset($seen[$entity->parent])) {
+                throw InvariantViolation::because(sprintf(
+                    "Entity %s belongs to %s, which is not in this asset",
+                    $entity->id,
+                    $entity->parent,
+                ));
+            }
+        }
+
+        $this->entities = array_values($entities);
     }
 }

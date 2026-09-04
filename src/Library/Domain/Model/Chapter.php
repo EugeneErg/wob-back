@@ -7,8 +7,9 @@ namespace Wob\Library\Domain\Model;
 use Wob\Library\Domain\ValueObject\AssetId;
 use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\LevelId;
-use Wob\Library\Domain\ValueObject\MapEdge;
+use Wob\Library\Domain\ValueObject\CanvasRect;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Shared\Domain\Exception\InvariantViolation;
 
 /**
@@ -24,7 +25,6 @@ final class Chapter
 {
     /**
      * @param list<MapNode> $nodes
-     * @param list<MapEdge> $edges
      * @param list<AssetId> $hot
      */
     public function __construct(
@@ -32,8 +32,19 @@ final class Chapter
         private string $title,
         private string $image,
         private array $nodes = [],
-        private array $edges = [],
         private array $hot = [],
+
+        // The picture the level map is drawn on. Presentation only, so it does
+        // not reach hashableContent().
+        //
+        // A chapter has no film of its own. It had one briefly, and that put a
+        // wait in front of every map a player opened; the story's plays once
+        // and each point's plays after its level, which covers the same beats
+        // without repeating one of them.
+        private string $map = '',
+
+        // Where this chapter sits on the story board.
+        private ?CanvasRect $canvas = null,
     ) {
         $this->rename($title);
         $this->assertGraphIsSound();
@@ -53,12 +64,6 @@ final class Chapter
     public function nodes(): array
     {
         return $this->nodes;
-    }
-
-    /** @return list<MapEdge> */
-    public function edges(): array
-    {
-        return $this->edges;
     }
 
     /** @return list<AssetId> */
@@ -104,12 +109,20 @@ final class Chapter
         return array_map(static fn (MapNode $n): LevelId => $n->levelId, $this->nodes);
     }
 
+    /** @return list<NodeId> */
+    public function nodeIds(): array
+    {
+        return array_map(static fn (MapNode $n): NodeId => $n->id, $this->nodes);
+    }
+
     public function pin(MapNode $node): void
     {
-        if ($this->holds($node->levelId)) {
-            throw InvariantViolation::because(
-                sprintf("Level %s is already on this chapter map", $node->levelId->value),
-            );
+        foreach ($this->nodes as $existing) {
+            if ($existing->id->equals($node->id)) {
+                throw InvariantViolation::because(
+                    sprintf("Point %s is already on this chapter map", $node->id->value),
+                );
+            }
         }
 
         $this->nodes[] = $node;
@@ -121,18 +134,16 @@ final class Chapter
      * whole is also the only way to catch a half-applied change.
      *
      * @param list<MapNode> $nodes
-     * @param list<MapEdge> $edges
      */
-    public function replaceMap(array $nodes, array $edges): void
+    public function replaceMap(array $nodes): void
     {
-        $before = [$this->nodes, $this->edges];
+        $before = $this->nodes;
         $this->nodes = array_values($nodes);
-        $this->edges = array_values($edges);
 
         try {
             $this->assertGraphIsSound();
         } catch (InvariantViolation $e) {
-            [$this->nodes, $this->edges] = $before;
+            $this->nodes = $before;
 
             throw $e;
         }
@@ -145,21 +156,38 @@ final class Chapter
      */
     public function unpin(LevelId $levelId): void
     {
+        $gone = [];
+
+        foreach ($this->nodes as $node) {
+            if ($node->levelId->equals($levelId)) {
+                $gone[] = $node->id;
+            }
+        }
+
         $this->nodes = array_values(array_filter(
             $this->nodes,
             static fn (MapNode $n): bool => !$n->levelId->equals($levelId),
         ));
-        $this->edges = array_values(array_filter(
-            $this->edges,
-            static fn (MapEdge $e): bool => !$e->from->equals($levelId) && !$e->to->equals($levelId),
-        ));
+
+        $this->forgetLinksTo(...$gone);
     }
 
-    /** Called when the chapter this map pointed out to is gone. */
-    public function forgetExitsTo(ChapterId $chapterId): void
+    /**
+     * Called when points elsewhere are gone.
+     *
+     * A link to a point that no longer exists is worse than no link: on the map
+     * it still looks like a way forward, and everything behind it stays shut
+     * for good because the point that was meant to open it can never be
+     * finished.
+     */
+    public function forgetLinksTo(NodeId ...$gone): void
     {
+        if ($gone === []) {
+            return;
+        }
+
         $this->nodes = array_map(
-            static fn (MapNode $n): MapNode => $n->next?->equals($chapterId) === true ? $n->withNext(null) : $n,
+            static fn (MapNode $n): MapNode => $n->withoutLinksTo(...$gone),
             $this->nodes,
         );
     }
@@ -172,27 +200,20 @@ final class Chapter
 
     private function assertGraphIsSound(): void
     {
+        // Ids must be unique; levels no longer have to be. A level shown at
+        // two points is the whole point of points having names.
         $seen = [];
 
         foreach ($this->nodes as $node) {
-            if (isset($seen[$node->levelId->value])) {
+            if (isset($seen[$node->id->value])) {
                 throw InvariantViolation::because(
-                    sprintf("Level %s appears twice on the chapter map", $node->levelId->value),
+                    sprintf("Point %s appears twice on the chapter map", $node->id->value),
                 );
             }
 
-            $seen[$node->levelId->value] = true;
+            $seen[$node->id->value] = true;
         }
 
-        foreach ($this->edges as $edge) {
-            foreach ([$edge->from, $edge->to] as $end) {
-                if (!isset($seen[$end->value])) {
-                    throw InvariantViolation::because(
-                        sprintf("A path points at level %s, which is not on this chapter map", $end->value),
-                    );
-                }
-            }
-        }
     }
 
     /**
@@ -226,6 +247,26 @@ final class Chapter
      *
      * @return array<string, mixed>
      */
+    public function setMap(string $map): void
+    {
+        $this->map = $map;
+    }
+
+    public function map(): string
+    {
+        return $this->map;
+    }
+
+    public function canvas(): CanvasRect
+    {
+        return $this->canvas ??= new CanvasRect(0, 0, 420, 300);
+    }
+
+    public function placeOnCanvas(CanvasRect $rect): void
+    {
+        $this->canvas = $rect;
+    }
+
     public function hashableContent(array $levelHashes, array $levelNames = []): array
     {
         $levels = array_map(
@@ -234,11 +275,17 @@ final class Chapter
                 . ':' . ($levelNames[$n->levelId->value] ?? ''),
             $this->nodes,
         );
-        $edges = array_map(static fn (MapEdge $e): string => $e->from->value . ">" . $e->to->value, $this->edges);
+        $links = [];
+
+        foreach ($this->nodes as $node) {
+            foreach ($node->next as $child) {
+                $links[] = $node->id->value . ">" . $child->value;
+            }
+        }
 
         sort($levels, SORT_STRING);
-        sort($edges, SORT_STRING);
+        sort($links, SORT_STRING);
 
-        return ["id" => $this->id->value, "levels" => $levels, "edges" => $edges];
+        return ["id" => $this->id->value, "levels" => $levels, "links" => $links];
     }
 }

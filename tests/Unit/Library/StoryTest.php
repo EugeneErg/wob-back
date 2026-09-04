@@ -13,8 +13,8 @@ use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\Dimensions;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
-use Wob\Library\Domain\ValueObject\MapEdge;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Shared\Domain\Exception\ConcurrentModification;
@@ -28,16 +28,18 @@ final class StoryTest extends TestCase
 {
     private const OWNER = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 
-    public function testAPathCannotPointAtALevelThatIsNotOnTheMap(): void
+    public function testALinkCannotPointAtAPlaceThatIsNotInTheStory(): void
     {
         $story = $this->storyWith(['a', 'b']);
-        $chapter = $story->chapter(new ChapterId('ch-1'));
 
         $this->expectException(InvariantViolation::class);
 
-        $chapter->replaceMap(
-            [new MapNode(new LevelId('lvl-a'), 10, 10)],
-            [new MapEdge(new LevelId('lvl-a'), new LevelId('lvl-b'))],
+        // Links now cross chapters, so a chapter on its own cannot tell whether
+        // one resolves — the story is the scope, and it is the story that says
+        // no.
+        $story->replaceChapterMap(
+            new ChapterId('ch-1'),
+            [new MapNode(new NodeId('nd-lvl-a'), new LevelId('lvl-a'), 10, 10, [new NodeId('nd-nowhere')])],
         );
     }
 
@@ -53,10 +55,10 @@ final class StoryTest extends TestCase
         $before = count($chapter->nodes());
 
         try {
-            $chapter->replaceMap(
-                [new MapNode(new LevelId('lvl-a'), 10, 10)],
-                [new MapEdge(new LevelId('lvl-a'), new LevelId('lvl-b'))],
-            );
+            $chapter->replaceMap([
+                new MapNode(new NodeId('nd-1'), new LevelId('lvl-a'), 10, 10),
+                new MapNode(new NodeId('nd-1'), new LevelId('lvl-b'), 20, 20),
+            ]);
         } catch (InvariantViolation) {
             // expected
         }
@@ -79,7 +81,7 @@ final class StoryTest extends TestCase
         $story = $this->storyWith(['a', 'b']);
         $second = new Chapter(new ChapterId('ch-2'), 'Second', '#000');
         $story->addChapter($second);
-        $second->pin(new MapNode(new LevelId('lvl-a'), 50, 50));
+        $second->pin(new MapNode(new NodeId('nd-lvl-a'), new LevelId('lvl-a'), 50, 50));
 
         $story->removeChapter(new ChapterId('ch-1'));
 
@@ -92,20 +94,27 @@ final class StoryTest extends TestCase
      * way forward, and would let the chapter count as finished through a road
      * that does not exist.
      */
-    public function testDeletingAChapterClearsTheExitsThatLedIntoIt(): void
+    public function testDeletingAChapterClearsTheLinksThatLedIntoIt(): void
     {
-        $story = $this->storyWith(['a']);
-        $second = new Chapter(new ChapterId('ch-2'), 'Second', '#000');
-        $story->addChapter($second);
+        $story = $this->storyWith(['a', 'b']);
+        $story->addChapter(new Chapter(new ChapterId('ch-2'), 'Second', '#000'));
 
-        $story->chapter(new ChapterId('ch-1'))->replaceMap(
-            [new MapNode(new LevelId('lvl-a'), 10, 10, new ChapterId('ch-2'))],
-            [],
-        );
+        // Move one point into the second chapter, then link across to it.
+        $story->replaceChapterMap(new ChapterId('ch-1'), [
+            new MapNode(new NodeId('nd-lvl-a'), new LevelId('lvl-a'), 10, 10),
+        ]);
+        $story->replaceChapterMap(new ChapterId('ch-2'), [
+            new MapNode(new NodeId('nd-lvl-b'), new LevelId('lvl-b'), 10, 10),
+        ]);
+        $story->replaceChapterMap(new ChapterId('ch-1'), [
+            new MapNode(new NodeId('nd-lvl-a'), new LevelId('lvl-a'), 10, 10, [new NodeId('nd-lvl-b')]),
+        ]);
 
         $story->removeChapter(new ChapterId('ch-2'));
 
-        self::assertNull($story->chapter(new ChapterId('ch-1'))->nodes()[0]->next);
+        // A link to a place that is gone would look like a way forward and gate
+        // everything behind it for good.
+        self::assertSame([], $story->chapter(new ChapterId('ch-1'))->nodes()[0]->next);
     }
 
     public function testAStoryCannotBeBuiltWithAChapterPointingOutsideIt(): void
@@ -117,7 +126,7 @@ final class StoryTest extends TestCase
             new OwnerId(self::OWNER),
             'Story',
             '#000',
-            [new Chapter(new ChapterId('ch-1'), 'One', '#000', [new MapNode(new LevelId('lvl-ghost'), 1, 1)])],
+            [new Chapter(new ChapterId('ch-1'), 'One', '#000', [new MapNode(new NodeId('nd-lvl-ghost'), new LevelId('lvl-ghost'), 1, 1)])],
             [],
         );
     }
@@ -143,7 +152,7 @@ final class StoryTest extends TestCase
         foreach ($levelSuffixes as $suffix) {
             $id = new LevelId('lvl-' . $suffix);
             $levels[] = new Level($id, 'Level ' . $suffix, new Dimensions(1600, 900), new Gravity(0, 1800), 3, []);
-            $nodes[] = new MapNode($id, $x, 50.0);
+            $nodes[] = new MapNode(new NodeId('nd-' . $id->value), $id, $x, 50.0);
             $x += 10.0;
         }
 

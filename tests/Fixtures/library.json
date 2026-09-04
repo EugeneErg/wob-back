@@ -3,7 +3,7 @@
   "stories": [
     {
       "id": "story-first",
-      "title": "Первые шаги",
+      "title": "First Steps",
       "cover": "linear-gradient(140deg,#3d5a3a,#16242b 70%)",
       "chapters": [
         "ch-basics",
@@ -11,86 +11,103 @@
       ],
       "hot": [
         "as-anchor"
-      ]
+      ],
+      "start": "nd-lvl-tower"
     }
   ],
   "chapters": [
     {
       "id": "ch-basics",
       "storyId": "story-first",
-      "title": "Основы",
+      "title": "Basics",
       "image": "linear-gradient(160deg,#243b2c,#0f1a20)",
       "nodes": [
         {
           "levelId": "lvl-tower",
           "x": 22,
-          "y": 62
+          "y": 62,
+          "id": "nd-lvl-tower",
+          "next": [
+            "nd-lvl-bridge"
+          ]
         },
         {
           "levelId": "lvl-bridge",
           "x": 58,
-          "y": 38
+          "y": 38,
+          "id": "nd-lvl-bridge",
+          "next": [
+            "nd-lvl-lift"
+          ]
         }
       ],
-      "edges": [
-        {
-          "from": "lvl-tower",
-          "to": "lvl-bridge"
-        }
-      ],
-      "hot": []
+      "hot": [],
+      "canvas": {
+        "x": 0,
+        "y": 0,
+        "w": 420,
+        "h": 300
+      },
+      "map": ""
     },
     {
       "id": "ch-tools",
       "storyId": "story-first",
-      "title": "Инструменты",
+      "title": "Tools",
       "image": "linear-gradient(160deg,#2b3a4d,#0f1a20)",
       "nodes": [
         {
           "levelId": "lvl-lift",
           "x": 26,
-          "y": 58
+          "y": 58,
+          "id": "nd-lvl-lift",
+          "next": [
+            "nd-lvl-dig"
+          ]
         },
         {
           "levelId": "lvl-dig",
           "x": 66,
-          "y": 44
+          "y": 44,
+          "id": "nd-lvl-dig",
+          "next": [
+            "nd-lvl-hole"
+          ]
         },
         {
           "levelId": "lvl-hole",
           "x": 84,
-          "y": 66
+          "y": 66,
+          "id": "nd-lvl-hole",
+          "next": [
+            "nd-lvl-orbit"
+          ]
         },
         {
           "levelId": "lvl-orbit",
           "x": 52,
-          "y": 80
-        }
-      ],
-      "edges": [
-        {
-          "from": "lvl-lift",
-          "to": "lvl-dig"
-        },
-        {
-          "from": "lvl-dig",
-          "to": "lvl-hole"
-        },
-        {
-          "from": "lvl-hole",
-          "to": "lvl-orbit"
+          "y": 80,
+          "id": "nd-lvl-orbit",
+          "next": []
         }
       ],
       "hot": [
         "as-balloon",
         "as-sandbox"
-      ]
+      ],
+      "canvas": {
+        "x": 500,
+        "y": 0,
+        "w": 420,
+        "h": 300
+      },
+      "map": ""
     }
   ],
   "levels": [
     {
       "id": "lvl-tower",
-      "name": "Башня",
+      "name": "Tower",
       "width": 1600,
       "height": 900,
       "gravity": {
@@ -549,7 +566,7 @@
     },
     {
       "id": "lvl-bridge",
-      "name": "Пропасть",
+      "name": "The Gap",
       "width": 1600,
       "height": 900,
       "gravity": {
@@ -1020,7 +1037,7 @@
     },
     {
       "id": "lvl-lift",
-      "name": "Подъём",
+      "name": "The Climb",
       "width": 1600,
       "height": 900,
       "gravity": {
@@ -1495,7 +1512,7 @@
     },
     {
       "id": "lvl-dig",
-      "name": "Раскопки",
+      "name": "Digging",
       "width": 1600,
       "height": 900,
       "gravity": {
@@ -1937,7 +1954,7 @@
     },
     {
       "id": "lvl-hole",
-      "name": "Лунка",
+      "name": "Hole",
       "width": 2400,
       "height": 900,
       "gravity": {
@@ -2144,7 +2161,7 @@
     },
     {
       "id": "lvl-orbit",
-      "name": "Орбита",
+      "name": "Orbit",
       "width": 1600,
       "height": 900,
       "gravity": {
@@ -2548,254 +2565,314 @@
   "assets": [
     {
       "id": "as-balloon",
-      "type": "game-ball",
-      "title": "Воздушный шарик",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "r": 12,
-        "builtR": 26,
-        "mass": 1,
-        "builtMass": -5,
-        "anchorable": false,
-        "asleep": false,
-        "minLinks": 1,
-        "maxLinks": 1,
-        "range": 165,
-        "jump": 470,
-        "speed": 95,
-        "dropMax": 190,
-        "color": "#9ad0e8",
-        "linkColor": "#cfe9f5"
-      }
+      "title": "Balloon",
+      "entities": [
+        {
+          "id": "as-balloon",
+          "type": "game-ball",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "r": 12,
+            "builtR": 26,
+            "mass": 1,
+            "builtMass": -5,
+            "anchorable": false,
+            "asleep": false,
+            "minLinks": 1,
+            "maxLinks": 1,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#9ad0e8",
+            "linkColor": "#cfe9f5"
+          }
+        }
+      ]
     },
     {
       "id": "as-sleeper",
-      "type": "game-ball",
-      "title": "Спящий шар",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "r": 13,
-        "builtR": 13,
-        "mass": 1,
-        "builtMass": 1,
-        "anchorable": true,
-        "asleep": true,
-        "minLinks": 2,
-        "maxLinks": 3,
-        "range": 165,
-        "jump": 470,
-        "speed": 95,
-        "dropMax": 190,
-        "color": "#b08a6a",
-        "linkColor": "#d8bb98"
-      }
+      "title": "Sleeping ball",
+      "entities": [
+        {
+          "id": "as-sleeper",
+          "type": "game-ball",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "r": 13,
+            "builtR": 13,
+            "mass": 1,
+            "builtMass": 1,
+            "anchorable": true,
+            "asleep": true,
+            "minLinks": 2,
+            "maxLinks": 3,
+            "range": 165,
+            "jump": 470,
+            "speed": 95,
+            "dropMax": 190,
+            "color": "#b08a6a",
+            "linkColor": "#d8bb98"
+          }
+        }
+      ]
     },
     {
       "id": "as-anchor",
-      "type": "system-ball",
-      "title": "Опора",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "r": 17,
-        "static": true,
-        "links": [],
-        "color": "#d8cbb0",
-        "linkColor": "#b9ae95"
-      }
+      "title": "Anchor",
+      "entities": [
+        {
+          "id": "as-anchor",
+          "type": "system-ball",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "r": 17,
+            "static": true,
+            "links": [],
+            "color": "#d8cbb0",
+            "linkColor": "#b9ae95"
+          }
+        }
+      ]
     },
     {
       "id": "as-crate",
-      "type": "object",
-      "title": "Тяжёлый ящик",
-      "data": {
-        "points": [
-          [
-            -70,
-            -35
-          ],
-          [
-            70,
-            -35
-          ],
-          [
-            70,
-            35
-          ],
-          [
-            -70,
-            35
-          ]
-        ],
-        "mass": 8,
-        "smoothness": 0.4,
-        "restitution": 0.1,
-        "static": false,
-        "fill": "#5c5346",
-        "edge": "#8d7f68"
-      }
+      "title": "Heavy crate",
+      "entities": [
+        {
+          "id": "as-crate",
+          "type": "object",
+          "data": {
+            "points": [
+              [
+                -70,
+                -35
+              ],
+              [
+                70,
+                -35
+              ],
+              [
+                70,
+                35
+              ],
+              [
+                -70,
+                35
+              ]
+            ],
+            "mass": 8,
+            "smoothness": 0.4,
+            "restitution": 0.1,
+            "static": false,
+            "fill": "#5c5346",
+            "edge": "#8d7f68"
+          }
+        }
+      ]
     },
     {
       "id": "as-sandbox",
-      "type": "sand",
-      "title": "Куча песка",
-      "data": {
-        "points": [
-          [
-            -120,
-            -100
-          ],
-          [
-            120,
-            -100
-          ],
-          [
-            120,
-            100
-          ],
-          [
-            -120,
-            100
-          ]
-        ],
-        "polys": null,
-        "dig": 22,
-        "smoothness": 0.25,
-        "fill": "#c9a86a",
-        "edge": "#8a6f3e"
-      }
+      "title": "Sand pile",
+      "entities": [
+        {
+          "id": "as-sandbox",
+          "type": "sand",
+          "data": {
+            "points": [
+              [
+                -120,
+                -100
+              ],
+              [
+                120,
+                -100
+              ],
+              [
+                120,
+                100
+              ],
+              [
+                -120,
+                100
+              ]
+            ],
+            "polys": null,
+            "dig": 22,
+            "smoothness": 0.25,
+            "fill": "#c9a86a",
+            "edge": "#8a6f3e"
+          }
+        }
+      ]
     },
     {
       "id": "as-ice",
-      "type": "terrain",
-      "title": "Ледяной уступ",
-      "data": {
-        "points": [
-          [
-            -150,
-            -20
-          ],
-          [
-            150,
-            -20
-          ],
-          [
-            150,
-            20
-          ],
-          [
-            -150,
-            20
-          ]
-        ],
-        "smoothness": 0.95,
-        "fill": "#2b3f4a",
-        "edge": "#7fb6cc"
-      }
+      "title": "Ice ledge",
+      "entities": [
+        {
+          "id": "as-ice",
+          "type": "terrain",
+          "data": {
+            "points": [
+              [
+                -150,
+                -20
+              ],
+              [
+                150,
+                -20
+              ],
+              [
+                150,
+                20
+              ],
+              [
+                -150,
+                20
+              ]
+            ],
+            "smoothness": 0.95,
+            "fill": "#2b3f4a",
+            "edge": "#7fb6cc"
+          }
+        }
+      ]
     },
     {
       "id": "as-motor",
-      "type": "motor",
-      "title": "Двигатель",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "r": 26,
-        "hard": true,
-        "speed": 0.4,
-        "torque": 60,
-        "color": "#c58a4b"
-      }
+      "title": "Motor",
+      "entities": [
+        {
+          "id": "as-motor",
+          "type": "motor",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "r": 26,
+            "hard": true,
+            "speed": 0.4,
+            "torque": 60,
+            "color": "#c58a4b"
+          }
+        }
+      ]
     },
     {
       "id": "as-hinge",
-      "type": "motor",
-      "title": "Шарнир (без мотора)",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "r": 22,
-        "hard": false,
-        "speed": 0,
-        "torque": 60,
-        "color": "#8fb36a"
-      }
+      "title": "Hinge (no motor)",
+      "entities": [
+        {
+          "id": "as-hinge",
+          "type": "motor",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "r": 22,
+            "hard": false,
+            "speed": 0,
+            "torque": 60,
+            "color": "#8fb36a"
+          }
+        }
+      ]
     },
     {
       "id": "as-hole",
-      "type": "hole",
-      "title": "Лунка",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "r": 19,
-        "depth": 26,
-        "counts": true,
-        "signal": "",
-        "color": "#4a5560",
-        "glow": "#8fb36a"
-      }
+      "title": "Hole",
+      "entities": [
+        {
+          "id": "as-hole",
+          "type": "hole",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "r": 19,
+            "depth": 26,
+            "counts": true,
+            "signal": "",
+            "color": "#4a5560",
+            "glow": "#8fb36a"
+          }
+        }
+      ]
     },
     {
       "id": "as-wind",
-      "type": "wind",
-      "title": "Ветер (порывистый)",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "ax": 320,
-        "ay": -40,
-        "bx": -160,
-        "by": 40,
-        "period": 3,
-        "force": 0.7,
-        "show": true,
-        "color": "#9fc6d8"
-      }
+      "title": "Wind (gusty)",
+      "entities": [
+        {
+          "id": "as-wind",
+          "type": "wind",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "ax": 320,
+            "ay": -40,
+            "bx": -160,
+            "by": 40,
+            "period": 3,
+            "force": 0.7,
+            "show": true,
+            "color": "#9fc6d8"
+          }
+        }
+      ]
     },
     {
       "id": "as-fan",
-      "type": "fan",
-      "title": "Вентилятор",
-      "data": {
-        "x": 0,
-        "y": 0,
-        "angle": -90,
-        "power": 520,
-        "nozzle": 46,
-        "cell": 22,
-        "push": 16,
-        "show": true,
-        "color": "#7fb6cc"
-      }
+      "title": "Fan",
+      "entities": [
+        {
+          "id": "as-fan",
+          "type": "fan",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "angle": -90,
+            "power": 520,
+            "nozzle": 46,
+            "cell": 22,
+            "push": 16,
+            "show": true,
+            "color": "#7fb6cc"
+          }
+        }
+      ]
     },
     {
       "id": "as-rails",
-      "type": "rails",
-      "title": "Рельсы",
-      "data": {
-        "points": [
-          [
-            -160,
-            0
-          ],
-          [
-            160,
-            0
-          ]
-        ],
-        "closed": false,
-        "segs": [
-          {
-            "speed": 140,
-            "wait": 1
+      "title": "Rails",
+      "entities": [
+        {
+          "id": "as-rails",
+          "type": "rails",
+          "data": {
+            "points": [
+              [
+                -160,
+                0
+              ],
+              [
+                160,
+                0
+              ]
+            ],
+            "closed": false,
+            "segs": [
+              {
+                "speed": 140,
+                "wait": 1
+              }
+            ],
+            "color": "#8d93a1",
+            "show": true
           }
-        ],
-        "color": "#8d93a1",
-        "show": true
-      }
+        }
+      ]
     }
   ]
 }

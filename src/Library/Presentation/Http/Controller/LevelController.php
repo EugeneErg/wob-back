@@ -13,6 +13,9 @@ use Wob\Library\Application\Handler\CreateLevelHandler;
 use Wob\Library\Application\Handler\DeleteLevelHandler;
 use Wob\Library\Application\Handler\SaveLevelHandler;
 use Wob\Library\Application\Query\LibraryReadModel;
+use Wob\Library\Application\Command\PinLevel;
+use Wob\Library\Application\Handler\PinLevelHandler;
+use Wob\Library\Domain\Service\IdGenerator;
 use Wob\Shared\Domain\Exception\InvariantViolation;
 use stdClass;
 
@@ -23,32 +26,39 @@ final readonly class LevelController
         private CreateLevelHandler $create,
         private SaveLevelHandler $save,
         private DeleteLevelHandler $delete,
+        private IdGenerator $ids,
+        private PinLevelHandler $pin,
     ) {
     }
 
     public function create(Request $request, string $storyId): JsonResponse
     {
         $data = $request->validate([
-            "id" => ["required", "string", "max:64"],
-            "chapterId" => ["required", "string", "max:64"],
+            "chapterId" => ["nullable", "string", "max:64"],
             "name" => ["required", "string", "max:200"],
-            "x" => ["required", "numeric", "between:0,100"],
-            "y" => ["required", "numeric", "between:0,100"],
+            "x" => ["nullable", "numeric", "between:0,100"],
+            "y" => ["nullable", "numeric", "between:0,100"],
             "version" => ["required", "integer", "min:0"],
         ]);
+
+        // И уровень, и точка на карте получают имена здесь: клиент их не
+        // придумывает и не может — он не знает, что уже занято.
+        $levelId = $this->ids->next("lvl");
+        $nodeId = $this->ids->next("nd");
 
         $story = ($this->create)(new CreateLevel(
             $this->owner($request),
             $storyId,
-            $data["chapterId"],
-            $data["id"],
+            $data["chapterId"] ?? null,
+            $levelId,
             $data["name"],
-            (float) $data["x"],
-            (float) $data["y"],
+            (float) ($data["x"] ?? 50),
+            (float) ($data["y"] ?? 50),
             (int) $data["version"],
+            $nodeId,
         ));
 
-        return new JsonResponse(["id" => $data["id"], "version" => $story->version()], 201);
+        return new JsonResponse(["id" => $levelId, "nodeId" => $nodeId, "version" => $story->version()], 201);
     }
 
     public function save(Request $request, string $storyId, string $levelId): JsonResponse
@@ -63,6 +73,7 @@ final readonly class LevelController
             "entities" => ["present", "array"],
             "hot" => ["present", "array"],
             "hot.*" => ["string", "max:64"],
+            "image" => ["nullable", "string", "max:2000"],
             "version" => ["required", "integer", "min:0"],
         ]);
 
@@ -86,6 +97,7 @@ final readonly class LevelController
             $entities,
             $data["hot"],
             (int) $data["version"],
+            $data["image"] ?? null,
         ));
 
         return new JsonResponse(["id" => $levelId, "version" => $story->version()]);

@@ -17,6 +17,7 @@ use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Publishing\Application\Command\PublishRelease;
@@ -235,7 +236,7 @@ final class PublishingTest extends TestCase
             3,
             [$this->entity('e1', 'terrain')],
         );
-        $story->addLevel(new ChapterId('ch-1'), $level, new MapNode(new LevelId('lvl-fresh'), 80, 80));
+        $story->addLevel(new ChapterId('ch-1'), $level, new MapNode(new NodeId('nd-lvl-fresh'), new LevelId('lvl-fresh'), 80, 80));
         $this->stories()->save($story);
 
         $second = $this->publish('story-1');
@@ -353,7 +354,7 @@ final class PublishingTest extends TestCase
                     3,
                     [$this->entity("e{$c}{$l}a", 'terrain'), $this->entity("e{$c}{$l}b", 'terrain')],
                 );
-                $nodes[] = new MapNode($levelId, 10.0 * $l, 50.0);
+                $nodes[] = new MapNode(new NodeId('nd-' . $levelId->value), $levelId, 10.0 * $l, 50.0);
             }
 
             $chapterList[] = new Chapter(new ChapterId("ch-{$c}"), "Chapter {$c}", '#123', $nodes);

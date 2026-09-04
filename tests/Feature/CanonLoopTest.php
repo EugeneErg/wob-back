@@ -18,6 +18,7 @@ use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Publishing\Application\Command\PublishRelease;
@@ -301,9 +302,13 @@ final class CanonLoopTest extends TestCase
                     [new EntityPlacement("e{$c}{$l}", 'terrain', $data)],
                 );
 
-                // The last level of each chapter but the last leads onward.
-                $next = ($l === 3 && $c < 3) ? new ChapterId('ch-' . ($c + 1)) : null;
-                $nodes[] = new MapNode($id, 10.0 * $l, 50.0, $next);
+                // The last point of each chapter but the last leads onward —
+                // into the first point of the chapter after it, since links
+                // join points now rather than naming a whole chapter.
+                $next = ($l === 3 && $c < 3)
+                    ? [new NodeId('nd-lvl-' . ($c + 1) . '-1')]
+                    : [];
+                $nodes[] = new MapNode(new NodeId('nd-' . $id->value), $id, 10.0 * $l, 50.0, $next);
             }
 
             $chapters[] = new Chapter(new ChapterId("ch-{$c}"), "Chapter {$c}", '#123', $nodes);

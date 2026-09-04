@@ -14,8 +14,8 @@ use Wob\Library\Domain\ValueObject\Dimensions;
 use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
-use Wob\Library\Domain\ValueObject\MapEdge;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Library\Infrastructure\Hashing\Fnv1aContentHasher;
@@ -238,16 +238,13 @@ final class Fnv1aContentHasherTest extends TestCase
                 $raw->image ?? '',
                 array_map(
                     static fn (stdClass $n): MapNode => new MapNode(
+                        new NodeId($n->id ?? 'nd-' . $n->levelId),
                         new LevelId($n->levelId),
                         (float) $n->x,
                         (float) $n->y,
-                        isset($n->next) ? new ChapterId($n->next) : null,
+                        array_map(static fn (string $c): NodeId => new NodeId($c), $n->next ?? []),
                     ),
                     $raw->nodes,
-                ),
-                array_map(
-                    static fn (stdClass $e): MapEdge => new MapEdge(new LevelId($e->from), new LevelId($e->to)),
-                    $raw->edges,
                 ),
             );
         }

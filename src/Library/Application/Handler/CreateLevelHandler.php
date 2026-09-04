@@ -13,6 +13,7 @@ use Wob\Library\Domain\ValueObject\Dimensions;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 
@@ -44,11 +45,20 @@ final readonly class CreateLevelHandler
             [],
         );
 
-        $story->addLevel(
-            new ChapterId($command->chapterId),
-            $level,
-            new MapNode($levelId, $command->mapX, $command->mapY),
-        );
+        if ($command->chapterId === null) {
+            $story->addSpareLevel($level);
+        } else {
+            $story->addLevel(
+                new ChapterId($command->chapterId),
+                $level,
+                new MapNode(
+                    new NodeId($command->nodeId ?? 'nd-' . $command->levelId),
+                    $levelId,
+                    $command->mapX,
+                    $command->mapY,
+                ),
+            );
+        }
 
         $this->stories->save($story);
 

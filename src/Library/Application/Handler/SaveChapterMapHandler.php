@@ -9,8 +9,9 @@ use Wob\Library\Domain\Model\Story;
 use Wob\Library\Domain\Repository\StoryRepository;
 use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\LevelId;
-use Wob\Library\Domain\ValueObject\MapEdge;
+use Wob\Library\Domain\ValueObject\CanvasRect;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 
@@ -36,22 +37,38 @@ final readonly class SaveChapterMapHandler
             $chapter->setImage($command->image);
         }
 
+        if ($command->map !== null) {
+            $chapter->setMap($command->map);
+        }
+
+        if ($command->canvas !== null) {
+            $chapter->placeOnCanvas(new CanvasRect(
+                (float) $command->canvas['x'],
+                (float) $command->canvas['y'],
+                (float) $command->canvas['w'],
+                (float) $command->canvas['h'],
+            ));
+        }
+
         $nodes = array_map(
             static fn (array $n): MapNode => new MapNode(
+                // An editor that has not been taught about point ids yet still
+                // sends maps without them. Deriving one from the level keeps
+                // those saves working and matches what hydration does to rows
+                // written before points had names.
+                new NodeId($n["id"] ?? 'nd-' . $n["levelId"]),
                 new LevelId($n["levelId"]),
                 (float) $n["x"],
                 (float) $n["y"],
-                isset($n["next"]) && $n["next"] !== null ? new ChapterId($n["next"]) : null,
+                array_map(static fn (string $c): NodeId => new NodeId($c), $n["next"] ?? []),
+                (string) ($n["name"] ?? ''),
+                (string) ($n["image"] ?? ''),
+                (string) ($n["outro"] ?? ''),
             ),
             $command->nodes,
         );
 
-        $edges = array_map(
-            static fn (array $e): MapEdge => new MapEdge(new LevelId($e["from"]), new LevelId($e["to"])),
-            $command->edges,
-        );
-
-        $chapter->replaceMap($nodes, $edges);
+        $story->replaceChapterMap(new ChapterId($command->chapterId), $nodes);
 
         // Levels that fell off the map during this edit are now unreachable.
         // Saving through the aggregate is what catches that: it re-checks that

@@ -35,6 +35,10 @@ final readonly class SaveLevelHandler
         $level->replaceEntities(array_map(EntityPlacement::fromObject(...), $command->entities));
         $level->setHot(array_map(static fn (string $id): AssetId => new AssetId($id), $command->hot));
 
+        if ($command->image !== null) {
+            $level->setImage($command->image);
+        }
+
         $this->stories->save($story);
 
         return $story;

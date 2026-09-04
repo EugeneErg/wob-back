@@ -160,23 +160,21 @@ final readonly class PublishReleaseHandler
             $entry->image = $chapter->image();
             $entry->nodes = array_map(static function ($node): stdClass {
                 $out = new stdClass();
+                $out->id = $node->id->value;
                 $out->levelId = $node->levelId->value;
                 $out->x = $node->x;
                 $out->y = $node->y;
 
-                if ($node->next !== null) {
-                    $out->next = $node->next->value;
+                foreach (['name' => $node->name, 'image' => $node->image, 'outro' => $node->outro] as $k => $v) {
+                    if ($v !== '') {
+                        $out->$k = $v;
+                    }
                 }
+
+                $out->next = array_map(static fn ($c): string => $c->value, $node->next);
 
                 return $out;
             }, $chapter->nodes());
-            $entry->edges = array_map(static function ($edge): stdClass {
-                $out = new stdClass();
-                $out->from = $edge->from->value;
-                $out->to = $edge->to->value;
-
-                return $out;
-            }, $chapter->edges());
 
             $chapters[] = $entry;
         }

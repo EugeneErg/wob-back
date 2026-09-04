@@ -35,6 +35,14 @@ final class Level
         private int $goal,
         private array $entities,
         private array $hot = [],
+
+        // A still shown on the map node. Not in hashableContent() below,
+        // deliberately: swapping a picture must not invalidate a single
+        // recorded run, for the same reason renaming a level does not.
+        //
+        // The film that follows a level lives on the point, not here — the same
+        // level met twice can end two different ways.
+        private string $image = '',
     ) {
         $this->rename($name);
         $this->setGoal($goal);
@@ -141,6 +149,16 @@ final class Level
      *
      * @return array<string, mixed>
      */
+    public function setImage(string $image): void
+    {
+        $this->image = $image;
+    }
+
+    public function image(): string
+    {
+        return $this->image;
+    }
+
     public function hashableContent(): array
     {
         return [

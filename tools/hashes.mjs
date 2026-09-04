@@ -7,54 +7,40 @@
 //   node tools/hashes.mjs ../wob > tests/Fixtures/content-hashes.json
 //
 // Run it again whenever core/releases.js changes.
+//
+// It used to say all of that while carrying its own copy of the formula, which
+// made it exactly the second implementation it warns about — and the copy went
+// stale, so the PHP parity test ended up comparing the domain against a third
+// opinion. It now imports core/releases.js and asks the game.
+//
+// That takes two props. The library reads from localStorage, which does not
+// exist in node, so a map stands in for it; and the built-in content has to be
+// seeded before any hash is asked for, because chapter and story fingerprints
+// look up the levels they contain.
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const root = process.argv[2] ?? "../wob";
-const lib = JSON.parse(readFileSync(join(root, "src/levels/library.json"), "utf8"));
+const store = new Map();
 
-const fnv = (str) => {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
+globalThis.localStorage = {
+  get length() { return store.size; },
+  key: (i) => [...store.keys()][i],
+  getItem: (k) => (store.has(k) ? store.get(k) : null),
+  setItem: (k, v) => store.set(k, String(v)),
+  removeItem: (k) => store.delete(k),
+  clear: () => store.clear(),
 };
 
-const stable = (v) => {
-  if (v === null || typeof v !== "object") return JSON.stringify(v);
-  if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
-  return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(",")}}`;
-};
+const root = resolve(process.argv[2] ?? "../wob");
+const load = (rel) => import(pathToFileURL(join(root, rel)).href);
 
-const level = (id) => lib.levels.find((l) => l.id === id);
-const chapter = (id) => lib.chapters.find((c) => c.id === id);
+const library = await load("src/core/library.js");
+const { fnv, stable, levelHash, chapterHash, storyHash } = await load("src/core/releases.js");
 
-const levelHash = (l) => {
-  if (!l) return null;
-  const { id, width, height, gravity, goal, entities } = l;
-  return fnv(stable({ id, width, height, gravity, goal, entities }));
-};
-
-// Level names count towards the CHAPTER, and chapter titles towards the STORY:
-// a name belongs one level above the thing it names, so renaming never
-// invalidates the records set on the thing itself.
-const chapterHash = (ch) => {
-  if (!ch) return null;
-  const levels = ch.nodes
-    .map((n) => `${n.levelId}:${levelHash(level(n.levelId))}:${level(n.levelId)?.name ?? ""}`)
-    .sort();
-  const edges = ch.edges.map((e) => `${e.from}>${e.to}`).sort();
-  return fnv(stable({ id: ch.id, levels, edges }));
-};
-
-const storyHash = (s) => {
-  if (!s) return null;
-  const chapters = s.chapters.map((c) => `${c}:${chapterHash(chapter(c))}:${chapter(c)?.title ?? ""}`);
-  return fnv(stable({ id: s.id, title: s.title, chapters }));
-};
+const builtin = JSON.parse(readFileSync(join(root, "src/levels/library.json"), "utf8"));
+library.save(structuredClone(builtin));
 
 const out = { scalars: {}, levels: {}, chapters: {}, stories: {} };
 
@@ -65,8 +51,8 @@ out.scalars["empty-object"] = fnv(stable({}));
 out.scalars["unicode"] = fnv(stable({ t: 'Лунка / "x"' }));
 out.scalars["floats"] = fnv(stable({ x: 0.1, y: -1800.5, z: 1e21 }));
 
-for (const l of lib.levels) out.levels[l.id] = levelHash(l);
-for (const c of lib.chapters) out.chapters[c.id] = chapterHash(c);
-for (const s of lib.stories) out.stories[s.id] = storyHash(s);
+for (const l of builtin.levels) out.levels[l.id] = levelHash(l);
+for (const c of builtin.chapters) out.chapters[c.id] = chapterHash(c);
+for (const s of builtin.stories) out.stories[s.id] = storyHash(s);
 
 console.log(JSON.stringify(out, null, 2));

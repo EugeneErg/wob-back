@@ -40,6 +40,14 @@ final readonly class UpdateStoryHandler
             $story->setHot(array_map(static fn (string $id): AssetId => new AssetId($id), $command->hot));
         }
 
+        if ($command->intro !== null) {
+            $story->setIntro($command->intro);
+        }
+
+        if ($command->startNodeId !== null) {
+            $story->startOn($command->startNodeId === '' ? null : $command->startNodeId);
+        }
+
         if ($command->chapterOrder !== null) {
             $story->reorderChapters(array_map(static fn (string $id): ChapterId => new ChapterId($id), $command->chapterOrder));
         }

@@ -42,25 +42,25 @@ final class AuthoringFlowGranularTest extends TestCase
         // nothing in it. That is the point: an empty story is the most an
         // interrupted session can lose.
         $version = $this->createStory();
-        $this->assertDatabaseHas('stories', ['public_id' => 'story-1']);
+        $this->assertDatabaseHas('stories', ['public_id' => $this->storyId]);
 
         $version = $this->addChapter('ch-2', $version);
-        $version = $this->addLevel('lvl-1', 'ch-1', $version);
-        $version = $this->addLevel('lvl-2', 'ch-1', $version);
-        $version = $this->addLevel('lvl-3', 'ch-2', $version);
+        $version = $this->addLevel('lvl-1', $this->chapterId, $version);
+        $version = $this->addLevel('lvl-2', $this->chapterId, $version);
+        $version = $this->addLevel('lvl-3', $this->id('ch-2'), $version);
 
         // A level's contents are their own write, sent when the author stops
         // moving things rather than when they remember the button.
         $version = $this->saveLevel('lvl-1', $version, goal: 7);
 
-        $story = $this->getJson('/api/stories/story-1')->assertOk();
+        $story = $this->getJson("/api/stories/{$this->storyId}")->assertOk();
         $story->assertJsonCount(2, 'chapters');
         $story->assertJsonCount(3, 'levels');
 
-        $saved = collect($story->json('levels'))->firstWhere('id', 'lvl-1');
+        $saved = collect($story->json('levels'))->firstWhere('id', $this->id('lvl-1'));
         self::assertSame(7, $saved['goal']);
 
-        $this->postJson('/api/stories/story-1/publish')->assertStatus(201)->assertJsonPath('number', 1);
+        $this->postJson("/api/stories/{$this->storyId}/publish")->assertStatus(201)->assertJsonPath('number', 1);
     }
 
     /**
@@ -71,12 +71,11 @@ final class AuthoringFlowGranularTest extends TestCase
     public function testAStaleWriteIsRefused(): void
     {
         $version = $this->createStory();
-        $this->addLevel('lvl-1', 'ch-1', $version);
+        $this->addLevel('lvl-1', $this->chapterId, $version);
 
         // The other device still believes it is on the earlier version.
-        $this->postJson('/api/stories/story-1/levels', [
-            'id' => 'lvl-2',
-            'chapterId' => 'ch-1',
+        $this->postJson("/api/stories/{$this->storyId}/levels", [
+            'chapterId' => $this->chapterId,
             'name' => 'From the phone',
             'x' => 30,
             'y' => 50,
@@ -87,22 +86,22 @@ final class AuthoringFlowGranularTest extends TestCase
     public function testDeletingALevelIsItsOwnWrite(): void
     {
         $version = $this->createStory();
-        $version = $this->addLevel('lvl-1', 'ch-1', $version);
-        $version = $this->addLevel('lvl-2', 'ch-1', $version);
+        $version = $this->addLevel('lvl-1', $this->chapterId, $version);
+        $version = $this->addLevel('lvl-2', $this->chapterId, $version);
 
-        $this->deleteJson('/api/stories/story-1/chapters/ch-1/levels/lvl-1', ['version' => $version])
+        $this->deleteJson("/api/stories/{$this->storyId}/chapters/{$this->chapterId}/levels/{$this->id('lvl-1')}", ['version' => $version])
             ->assertOk();
 
-        $this->getJson('/api/stories/story-1')->assertJsonCount(1, 'levels');
+        $this->getJson("/api/stories/{$this->storyId}")->assertJsonCount(1, 'levels');
     }
 
     /** Entity data goes up and comes back untouched, whatever type it claims to be. */
     public function testEntityDataSurvivesEachSave(): void
     {
         $version = $this->createStory();
-        $version = $this->addLevel('lvl-1', 'ch-1', $version);
+        $version = $this->addLevel('lvl-1', $this->chapterId, $version);
 
-        $this->putJson('/api/stories/story-1/levels/lvl-1', [
+        $this->putJson("/api/stories/{$this->storyId}/levels/{$this->id('lvl-1')}", [
             'name' => 'Tower',
             'width' => 1600,
             'height' => 900,
@@ -117,7 +116,7 @@ final class AuthoringFlowGranularTest extends TestCase
             'version' => $version,
         ])->assertOk();
 
-        $level = collect($this->getJson('/api/stories/story-1')->json('levels'))->firstWhere('id', 'lvl-1');
+        $level = collect($this->getJson("/api/stories/{$this->storyId}")->json('levels'))->firstWhere('id', $this->id('lvl-1'));
 
         self::assertSame('not-invented-yet', $level['entities'][0]['type']);
         self::assertTrue($level['entities'][0]['data']['nested']['deep']);
@@ -125,41 +124,67 @@ final class AuthoringFlowGranularTest extends TestCase
 
     // --- helpers ---------------------------------------------------------
 
+    /**
+     * Помощники возвращают имена, а не задают их: id чеканит сервер, и узнать
+     * их можно только из ответа.
+     */
+    private string $storyId = '';
+    private string $chapterId = '';
+
+    /** @var array<string, string> рабочее прозвище в тесте -> выданный id */
+    private array $levelIds = [];
+
     private function createStory(): int
     {
-        return $this->postJson('/api/stories', [
-            'id' => 'story-1',
+        $made = $this->postJson('/api/stories', [
             'title' => 'My story',
             'cover' => '#000',
-            'chapter' => ['id' => 'ch-1', 'title' => 'Chapter one', 'image' => '#123'],
-        ])->assertStatus(201)->json('version');
+            'chapter' => ['title' => 'Chapter one', 'image' => '#123'],
+        ])->assertStatus(201)->json();
+
+        $this->storyId = $made['id'];
+        $this->chapterId = $this->getJson("/api/stories/{$this->storyId}")->json('chapters.0.id');
+
+        return $made['version'];
     }
 
-    private function addChapter(string $id, int $version): int
+    private function addChapter(string $nick, int $version): int
     {
-        return $this->postJson('/api/stories/story-1/chapters', [
-            'id' => $id,
+        $made = $this->postJson("/api/stories/{$this->storyId}/chapters", [
             'title' => 'Another chapter',
             'image' => '#123',
             'version' => $version,
-        ])->assertStatus(201)->json('version');
+        ])->assertStatus(201)->json();
+
+        $this->levelIds[$nick] = $made['id'];
+
+        return $made['version'];
     }
 
-    private function addLevel(string $id, string $chapterId, int $version): int
+    private function addLevel(string $nick, string $chapterId, int $version): int
     {
-        return $this->postJson('/api/stories/story-1/levels', [
-            'id' => $id,
+        $made = $this->postJson("/api/stories/{$this->storyId}/levels", [
             'chapterId' => $chapterId,
             'name' => 'A level',
             'x' => 30,
             'y' => 50,
             'version' => $version,
-        ])->assertStatus(201)->json('version');
+        ])->assertStatus(201)->json();
+
+        $this->levelIds[$nick] = $made['id'];
+
+        return $made['version'];
     }
 
-    private function saveLevel(string $id, int $version, int $goal): int
+    /** Выданный сервером id по тому прозвищу, под которым тест его завёл. */
+    private function id(string $nick): string
     {
-        return $this->putJson("/api/stories/story-1/levels/{$id}", [
+        return $this->levelIds[$nick] ?? $nick;
+    }
+
+    private function saveLevel(string $nick, int $version, int $goal): int
+    {
+        return $this->putJson("/api/stories/{$this->storyId}/levels/{$this->id($nick)}", [
             'name' => 'A level',
             'width' => 1600,
             'height' => 900,

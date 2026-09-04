@@ -25,6 +25,8 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
                 "id" => $s->public_id,
                 "title" => $s->title,
                 "cover" => $s->cover,
+                "startNodeId" => $s->start_node_id,
+                "intro" => $s->intro,
                 "hot" => $this->decode($s->hot),
                 "hash" => $s->content_hash,
                 "version" => (int) $s->version,
@@ -43,9 +45,8 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             ->get()
             ->map(fn (object $a): array => [
                 "id" => $a->public_id,
-                "type" => $a->type,
                 "title" => $a->title,
-                "data" => $this->decode($a->data),
+                "entities" => $this->decode($a->entities),
             ])
             ->all();
 
@@ -72,8 +73,12 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
                 "storyId" => $story->public_id,
                 "title" => $c->title,
                 "image" => $c->image,
+                "map" => $c->map,
+                "canvas" => [
+                    "x" => (float) $c->canvas_x, "y" => (float) $c->canvas_y,
+                    "w" => (float) $c->canvas_w, "h" => (float) $c->canvas_h,
+                ],
                 "nodes" => $this->decode($c->nodes),
-                "edges" => $this->decode($c->edges),
                 "hot" => $this->decode($c->hot),
                 "hash" => $c->content_hash,
             ])
@@ -90,6 +95,8 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             "id" => $story->public_id,
             "title" => $story->title,
             "cover" => $story->cover,
+            "startNodeId" => $story->start_node_id,
+            "intro" => $story->intro,
             "hot" => $this->decode($story->hot),
             "hash" => $story->content_hash,
             "version" => (int) $story->version,
@@ -171,9 +178,8 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             ->get()
             ->map(fn (object $a): array => [
                 'id' => $a->public_id,
-                'type' => $a->type,
                 'title' => $a->title,
-                'data' => $this->decode($a->data),
+                'entities' => $this->decode($a->entities),
             ])
             ->all();
 
@@ -206,6 +212,7 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
         return [
             "id" => $l->public_id,
             "name" => $l->name,
+            "image" => $l->image,
             "width" => (int) $l->width,
             "height" => (int) $l->height,
             "gravity" => $this->decode($l->gravity),

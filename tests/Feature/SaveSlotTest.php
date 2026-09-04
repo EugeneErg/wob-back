@@ -18,6 +18,7 @@ use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Publishing\Application\Command\PublishRelease;
@@ -46,6 +47,14 @@ final class SaveSlotTest extends TestCase
         $this->authorStory('story-1');
         app(PublishReleaseHandler::class)(new PublishRelease($this->playerId, 'story-1'));
         $this->actingAs(new SignedInUser($this->playerId));
+    }
+
+    /** Играть можно только опубликованное: прогон привязан к версии. */
+    public function testAnUnpublishedStoryCannotBePlayed(): void
+    {
+        $this->authorStory('story-draft');
+
+        $this->postJson('/api/stories/story-draft/slots')->assertStatus(404);
     }
 
     public function testAStoryStartsWithNoRuns(): void
@@ -230,7 +239,7 @@ final class SaveSlotTest extends TestCase
                 3,
                 [new EntityPlacement("e{$l}", 'terrain', $data)],
             );
-            $nodes[] = new MapNode($id, 10.0 * $l, 50.0);
+            $nodes[] = new MapNode(new NodeId('nd-' . $id->value), $id, 10.0 * $l, 50.0);
         }
 
         app(StoryRepository::class)->save(new Story(

@@ -15,8 +15,8 @@ use Wob\Library\Domain\ValueObject\Dimensions;
 use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
-use Wob\Library\Domain\ValueObject\MapEdge;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Shared\Domain\Exception\InvariantViolation;
@@ -36,11 +36,14 @@ use Wob\Shared\Domain\Exception\InvariantViolation;
  *  - an exit leading to a chapter outside the file is cleared. Keeping it would
  *    aim it at whatever chapter happens to own that id here, which is worse
  *    than no exit: the map would show a road onward into a stranger's story;
- *  - a chapter with no story gets a shelter story, because a chapter that
- *    belongs to nothing cannot be reached or played.
+ *  - a chapter with no story is refused outright, along with anything missing a
+ *    title or a name. Those are not damage this side can repair: the author is
+ *    the only one who knows what the thing was called and which story it
+ *    belonged to, so inventing an answer would bury the mistake instead of
+ *    reporting it.
  *
- * All three match what the client already does, which matters: a file that
- * round-trips through the server must come back the same as one loaded locally.
+ * The first two repairs drop something the file cannot support; the refusals
+ * cover everything the file simply failed to say. Nothing here makes a name up.
  */
 final readonly class BundleReader
 {
@@ -93,24 +96,45 @@ final readonly class BundleReader
      *
      * @return list<Asset>
      */
+    /**
+     * A name the client had to send, or a refusal.
+     *
+     * Import used to fill a missing title in with something plausible — the
+     * asset's type, the word "Chapter", the word "Story". That was a quiet lie:
+     * the client is the only side that knows what the author called the thing,
+     * so a server-invented name is not a repair, it is a second source of truth
+     * that nobody asked for and nobody can correct. Refusing is louder and
+     * shorter — the caller finds out at once that it dropped a field, instead of
+     * discovering a library full of items called "Story" much later.
+     */
+    private function required(stdClass $item, string $field, string $what): string
+    {
+        $value = isset($item->$field) ? trim((string) $item->$field) : '';
+
+        if ($value === '') {
+            $id = (string) ($item->id ?? '');
+
+            throw InvariantViolation::because($id === ''
+                ? sprintf('Every %s must have a %s', $what, $field)
+                : sprintf('%s "%s" has no %s', ucfirst($what), $id, $field));
+        }
+
+        return $value;
+    }
+
     private function readAssets(mixed $raw, array $existing): array
     {
         $assets = [];
 
         foreach ($this->objects($raw) as $item) {
             $old = (string) ($item->id ?? '');
-            $type = (string) ($item->type ?? '');
-            $title = (string) ($item->title ?? $type);
-            $data = $item->data ?? new stdClass();
-
-            if (!$data instanceof stdClass) {
-                throw InvariantViolation::because('Asset data must be an object');
-            }
+            $title = $this->required($item, 'title', 'asset');
+            $entities = $this->assetEntities($item, $old);
 
             // An identical asset already on the shelf is reused rather than
             // duplicated. Importing the same story twice should not leave two of
             // every anchor in the palette.
-            $same = $this->identicalAsset($existing, $type, $title, $data);
+            $same = $this->identicalAsset($existing, $title, $entities);
 
             if ($same !== null) {
                 $this->ids->pointAt($old, $same->id->value);
@@ -121,25 +145,51 @@ final readonly class BundleReader
             $assets[] = new Asset(
                 new AssetId($this->ids->reserveAsset($old)),
                 $this->owner,
-                $type,
                 $title,
-                $data,
+                $entities,
             );
         }
 
         return $assets;
     }
 
-    /** @param list<Asset> $existing */
-    private function identicalAsset(array $existing, string $type, string $title, stdClass $data): ?Asset
+    /**
+     * The entities an asset holds.
+     *
+     * A file written before assets could hold more than one carries a type and
+     * a data blob instead of a list. That is a group of one, so it is read as
+     * one rather than refused — the entity takes the asset's own id, which is
+     * the only name it has ever had.
+     *
+     * @return list<EntityPlacement>
+     */
+    private function assetEntities(stdClass $item, string $old): array
     {
-        $encoded = json_encode($data, JSON_THROW_ON_ERROR);
+        if (isset($item->entities) && is_array($item->entities)) {
+            return array_map(EntityPlacement::fromObject(...), $this->objects($item->entities));
+        }
+
+        $data = $item->data ?? new stdClass();
+
+        if (!$data instanceof stdClass) {
+            throw InvariantViolation::because('Asset data must be an object');
+        }
+
+        return [new EntityPlacement($old, (string) ($item->type ?? ''), $data)];
+    }
+
+    /**
+     * @param list<Asset>           $existing
+     * @param list<EntityPlacement> $entities
+     */
+    private function identicalAsset(array $existing, string $title, array $entities): ?Asset
+    {
+        $encoded = json_encode($entities, JSON_THROW_ON_ERROR);
 
         foreach ($existing as $asset) {
             if (
-                $asset->type === $type
-                && $asset->title() === $title
-                && json_encode($asset->data(), JSON_THROW_ON_ERROR) === $encoded
+                $asset->title() === $title
+                && json_encode($asset->entities(), JSON_THROW_ON_ERROR) === $encoded
             ) {
                 return $asset;
             }
@@ -159,7 +209,7 @@ final readonly class BundleReader
 
             $levels[$old] = new Level(
                 new LevelId($this->ids->reserveLevel($old)),
-                (string) ($item->name ?? 'Level'),
+                $this->required($item, 'name', 'level'),
                 new Dimensions((int) ($item->width ?? 1600), (int) ($item->height ?? 900)),
                 Gravity::fromArray((array) $gravity),
                 (int) ($item->goal ?? 0),
@@ -179,6 +229,11 @@ final readonly class BundleReader
      */
     private function readChapter(stdClass $raw, array $levels, array $chaptersInFile): array
     {
+        // Read before anything else so the warnings below can name the chapter
+        // the way its author did, and so a nameless chapter is refused before
+        // it has had a chance to produce warnings about its contents.
+        $title = $this->required($raw, 'title', 'chapter');
+
         $warnings = [];
         $nodes = [];
         $kept = [];
@@ -189,55 +244,96 @@ final readonly class BundleReader
             if (!isset($levels[$levelRef])) {
                 $warnings[] = sprintf(
                     'Chapter "%s" points at level "%s", which the file does not contain — that node was dropped',
-                    (string) ($raw->title ?? $raw->id ?? '?'),
+                    $title,
                     $levelRef,
                 );
 
                 continue;
             }
 
-            $next = isset($node->next) ? (string) $node->next : null;
+            $nextChapter = is_string($node->next ?? null) ? (string) $node->next : null;
 
-            if ($next !== null && !isset($chaptersInFile[$next])) {
-                $warnings[] = sprintf(
-                    'Chapter "%s" led on to a chapter outside the file — that exit was cleared',
-                    (string) ($raw->title ?? $raw->id ?? '?'),
-                );
-                $next = null;
-            }
+
 
             $levelId = $levels[$levelRef]->id;
             $kept[$levelRef] = $levelId;
 
             $nodes[] = new MapNode(
+                // Files written before points had ids carry none, so one is
+                // derived from the level — the same rule hydration uses, so a
+                // library that round-trips keeps its points.
+                new NodeId(isset($node->id) ? (string) $node->id : 'nd-' . $levelId->value),
                 $levelId,
                 (float) ($node->x ?? 0),
                 (float) ($node->y ?? 0),
-                $next === null ? null : new ChapterId($chaptersInFile[$next]),
+                // Only a real list counts. An older file carries a chapter name
+                // in this field, and casting a string to an array would turn
+                // that name into a link to a point that does not exist.
+                array_map(
+                    static fn (string $c): NodeId => new NodeId($c),
+                    array_values(array_filter(
+                        is_array($node->next ?? null) ? $node->next : [],
+                        static fn (mixed $c): bool => is_string($c),
+                    )),
+                ),
+                (string) ($node->name ?? ''),
+                (string) ($node->image ?? ''),
+                (string) ($node->outro ?? ''),
             );
+
+            if ($nextChapter !== null) {
+                // An exit that named a whole chapter. Points link to points
+                // now, and the point it should land on is a decision only the
+                // author can make, so it is reported rather than guessed.
+                $warnings[] = sprintf(
+                    'Chapter "%s" had an exit leading to another chapter; links now join points, so it was dropped and needs redrawing',
+                    $title,
+                );
+            }
         }
 
-        $edges = [];
+        // A library uploaded by an editor that still draws paths between levels
+        // rather than between points. The two say the same thing — finish this,
+        // open that — so the old form is converted instead of refused.
+        $idOfLevel = [];
+
+        foreach ($nodes as $node) {
+            $idOfLevel[$node->levelId->value] ??= $node->id;
+        }
+
+        $children = [];
 
         foreach ($this->objects($raw->edges ?? []) as $edge) {
             $from = (string) ($edge->from ?? '');
             $to = (string) ($edge->to ?? '');
 
-            // A path whose ends did not survive goes with them. The alternative
-            // is an aggregate that refuses to be built at all.
+            // A path whose ends did not survive goes with them.
             if (!isset($kept[$from], $kept[$to])) {
                 continue;
             }
 
-            $edges[] = new MapEdge($kept[$from], $kept[$to]);
+            $fromNode = $idOfLevel[$kept[$from]->value] ?? null;
+            $toNode = $idOfLevel[$kept[$to]->value] ?? null;
+
+            if ($fromNode !== null && $toNode !== null) {
+                $children[$fromNode->value][] = $toNode;
+            }
+        }
+
+        if ($children !== []) {
+            $nodes = array_map(
+                static fn (MapNode $n): MapNode => isset($children[$n->id->value])
+                    ? $n->withNext([...$n->next, ...$children[$n->id->value]])
+                    : $n,
+                $nodes,
+            );
         }
 
         $chapter = new Chapter(
             new ChapterId($chaptersInFile[(string) ($raw->id ?? '')]),
-            (string) ($raw->title ?? 'Chapter'),
+            $title,
             (string) ($raw->image ?? ''),
             $nodes,
-            $edges,
             $this->assetIds($raw->hot ?? []),
         );
 
@@ -270,7 +366,7 @@ final readonly class BundleReader
             $stories[] = new Story(
                 new StoryId($this->ids->reserveStory($old)),
                 $this->owner,
-                (string) ($item->title ?? 'Story'),
+                $this->required($item, 'title', 'story'),
                 (string) ($item->cover ?? ''),
                 $own,
                 $this->levelsUsedBy($own, $levels),
@@ -278,24 +374,19 @@ final readonly class BundleReader
             );
         }
 
-        // Chapters the file carried without a story to hold them — exporting a
-        // single chapter produces exactly this.
+        // A chapter nobody claimed. This used to get a shelter story named
+        // "Imported chapters", which was the worst of the invented names: the
+        // other four at least described one thing the client had sent, while
+        // this one conjured a whole story that the author never made and cannot
+        // be asked about. Every chapter belongs to a story or the bundle is
+        // wrong, and the caller is the only one who can say which story.
         $orphans = array_values(array_diff_key($chapters, $claimed));
 
         if ($orphans !== []) {
-            $warnings[] = sprintf(
-                '%d chapter(s) arrived without a story and were put in "Imported chapters"',
+            throw InvariantViolation::because(sprintf(
+                '%d chapter(s) arrived without a story — every chapter must belong to one',
                 count($orphans),
-            );
-
-            $stories[] = new Story(
-                new StoryId($this->ids->reserve('story', 'imported-' . bin2hex(random_bytes(3)), true)),
-                $this->owner,
-                'Imported chapters',
-                'linear-gradient(140deg,#4a3a5c,#16242b)',
-                $orphans,
-                $this->levelsUsedBy($orphans, $levels),
-            );
+            ));
         }
 
         return $stories;

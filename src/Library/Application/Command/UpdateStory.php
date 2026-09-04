@@ -18,6 +18,10 @@ final readonly class UpdateStory
         public ?array $hot,
         public ?array $chapterOrder,
         public int $expectedVersion,
+
+        // Nullable means untouched, like everything above.
+        public ?string $startNodeId = null,
+        public ?string $intro = null,
     ) {
     }
 }

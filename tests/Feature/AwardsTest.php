@@ -20,6 +20,7 @@ use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Publishing\Application\Command\PublishRelease;
@@ -293,7 +294,7 @@ final class AwardsTest extends TestCase
                 3,
                 [new EntityPlacement("e{$l}", 'terrain', $data)],
             );
-            $nodes[] = new MapNode($id, 10.0 * $l, 50.0);
+            $nodes[] = new MapNode(new NodeId('nd-' . $id->value), $id, 10.0 * $l, 50.0);
         }
 
         app(StoryRepository::class)->save(new Story(

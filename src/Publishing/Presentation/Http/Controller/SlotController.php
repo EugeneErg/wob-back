@@ -65,7 +65,10 @@ final readonly class SlotController
             );
         }
 
-        // A run is pinned to the version it starts on, so there has to be one.
+        // Прогон привязан к версии, на которой начат, поэтому версия обязана
+        // быть. Играть черновик нельзя: рекорд, поставленный на содержимом,
+        // которое автор ещё меняет, не с чем будет сверить — и не потому, что
+        // так удобнее, а потому что сверять не с чем.
         $release = $this->releases->latestOf($story) ?? throw NotFound::of('Release of story', $storyId);
 
         $slot = SaveSlot::start(

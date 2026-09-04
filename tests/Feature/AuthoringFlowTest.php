@@ -75,25 +75,27 @@ final class AuthoringFlowTest extends TestCase
     {
         $this->signIn();
 
-        $this->postJson('/api/stories', [
-            'id' => 'story-1',
+        // Имена выдаёт сервер: клиент их не присылает и не может — он не знает,
+        // что уже занято. Отсюда и берём.
+        $this->storyId = $this->postJson('/api/stories', [
             'title' => 'First steps',
             'cover' => '#123',
-            'chapter' => ['id' => 'ch-1', 'title' => 'Basics', 'image' => '#456'],
-        ])->assertStatus(201)->assertJsonPath('version', 1);
+            'chapter' => ['title' => 'Basics', 'image' => '#456'],
+        ])->assertStatus(201)->assertJsonPath('version', 1)->json('id');
 
-        $this->postJson('/api/stories/story-1/levels', [
-            'id' => 'lvl-1',
-            'chapterId' => 'ch-1',
+        $this->chapterId = $this->getJson("/api/stories/{$this->storyId}")->json('chapters.0.id');
+
+        $this->levelId = $this->postJson("/api/stories/{$this->storyId}/levels", [
+            'chapterId' => $this->chapterId,
             'name' => 'Tower',
             'x' => 20,
             'y' => 60,
             'version' => 1,
-        ])->assertStatus(201)->assertJsonPath('version', 2);
+        ])->assertStatus(201)->assertJsonPath('version', 2)->json('id');
 
         // Entity data goes in untouched and comes back untouched — including an
         // entity type this backend has never heard of.
-        $save = $this->putJson('/api/stories/story-1/levels/lvl-1', [
+        $save = $this->putJson("/api/stories/{$this->storyId}/levels/{$this->levelId}", [
             'name' => 'Tower',
             'width' => 1600,
             'height' => 900,
@@ -109,7 +111,7 @@ final class AuthoringFlowTest extends TestCase
 
         $save->assertOk()->assertJsonPath('version', 3);
 
-        $story = $this->getJson('/api/stories/story-1')->assertOk();
+        $story = $this->getJson("/api/stories/{$this->storyId}")->assertOk();
         $story->assertJsonPath('levels.0.goal', 5);
         $story->assertJsonPath('levels.0.entities.1.type', 'trampoline');
         $story->assertJsonPath('levels.0.entities.1.data.nested.deep', true);
@@ -124,11 +126,11 @@ final class AuthoringFlowTest extends TestCase
         $this->signIn();
         $this->createStoryWithLevel();
 
-        $hash = $this->getJson('/api/stories/story-1')->json('levels.0.hash');
+        $hash = $this->getJson("/api/stories/{$this->storyId}")->json('levels.0.hash');
 
         $this->getJson("/api/content/levels/{$hash}")
             ->assertOk()
-            ->assertJsonPath('id', 'lvl-1');
+            ->assertJsonPath('id', $this->levelId);
     }
 
     public function testAStaleWriteIsRefusedInsteadOfOverwriting(): void
@@ -138,7 +140,7 @@ final class AuthoringFlowTest extends TestCase
 
         // Version 2 was consumed by creating the level; a second device still
         // believes it is on 1.
-        $this->putJson('/api/stories/story-1/levels/lvl-1', [
+        $this->putJson("/api/stories/{$this->storyId}/levels/{$this->levelId}", [
             'name' => 'Renamed by the other tab',
             'width' => 1600,
             'height' => 900,
@@ -149,7 +151,7 @@ final class AuthoringFlowTest extends TestCase
             'version' => 1,
         ])->assertStatus(409)->assertJsonPath('error.code', 'conflict');
 
-        $this->getJson('/api/stories/story-1')->assertJsonPath('levels.0.name', 'Tower');
+        $this->getJson("/api/stories/{$this->storyId}")->assertJsonPath('levels.0.name', 'Tower');
     }
 
     public function testOneAuthorCannotTouchAnotherStory(): void
@@ -165,13 +167,13 @@ final class AuthoringFlowTest extends TestCase
         // forbidden from — it is not a story this account has. 404 rather than
         // 403 is also the smaller leak: 403 would confirm the id exists.
         $this->getJson('/api/library')->assertJsonCount(0, 'stories');
-        $this->getJson('/api/stories/story-1')->assertStatus(404);
+        $this->getJson("/api/stories/{$this->storyId}")->assertStatus(404);
         $this->deleteJson('/api/stories/story-1')->assertStatus(404);
 
         // The original owner still has it, untouched.
         $this->postJson('/api/auth/logout');
         $this->postJson('/api/auth/google', ['credential' => 'good-token'])->assertOk();
-        $this->getJson('/api/stories/story-1')->assertOk()->assertJsonPath('levels.0.name', 'Tower');
+        $this->getJson("/api/stories/{$this->storyId}")->assertOk()->assertJsonPath('levels.0.name', 'Tower');
     }
 
     /**
@@ -184,11 +186,11 @@ final class AuthoringFlowTest extends TestCase
         $this->signIn();
         $this->createStoryWithLevel();
 
-        $version = $this->getJson('/api/stories/story-1')->json('version');
+        $version = $this->getJson("/api/stories/{$this->storyId}")->json('version');
 
-        $this->deleteJson('/api/stories/story-1/chapters/ch-1', ['version' => $version])->assertOk();
+        $this->deleteJson("/api/stories/{$this->storyId}/chapters/{$this->chapterId}", ['version' => $version])->assertOk();
 
-        $story = $this->getJson('/api/stories/story-1');
+        $story = $this->getJson("/api/stories/{$this->storyId}");
         $story->assertJsonCount(0, 'chapters');
         $story->assertJsonCount(0, 'levels');
     }
@@ -198,17 +200,17 @@ final class AuthoringFlowTest extends TestCase
         $this->signIn();
         $this->createStoryWithLevel();
 
-        $this->postJson('/api/progress/complete', ['storyId' => 'story-1', 'levelId' => 'lvl-1'])
+        $this->postJson('/api/progress/complete', ['storyId' => $this->storyId, 'levelId' => $this->levelId])
             ->assertOk()
             ->assertJsonPath('completions', 1);
 
         // The client marks a level done the moment the last ball reaches the
         // pipe, and that message can arrive twice.
-        $this->postJson('/api/progress/complete', ['storyId' => 'story-1', 'levelId' => 'lvl-1'])
+        $this->postJson('/api/progress/complete', ['storyId' => $this->storyId, 'levelId' => $this->levelId])
             ->assertOk()
             ->assertJsonPath('completions', 2);
 
-        $this->getJson('/api/progress')->assertOk()->assertJsonPath('completed', ['lvl-1']);
+        $this->getJson('/api/progress')->assertOk()->assertJsonPath('completed', [$this->levelId]);
         $this->assertDatabaseCount('level_completions', 1);
     }
 
@@ -217,7 +219,7 @@ final class AuthoringFlowTest extends TestCase
         $this->signIn();
         $this->createStoryWithLevel();
 
-        $this->putJson('/api/stories/story-1/levels/lvl-1', [
+        $this->putJson("/api/stories/{$this->storyId}/levels/{$this->levelId}", [
             'name' => 'Tower',
             'width' => 1600,
             'height' => 900,
@@ -233,27 +235,35 @@ final class AuthoringFlowTest extends TestCase
         ])->assertStatus(422)->assertJsonPath('error.code', 'invalid');
     }
 
+    private string $storyId = '';
+    private string $chapterId = '';
+    private string $levelId = '';
+
     private function signIn(): void
     {
         $this->postJson('/api/auth/google', ['credential' => 'good-token'])->assertOk();
     }
 
+    /**
+     * Имена приходят с сервера, поэтому помощник их возвращает, а не задаёт.
+     * Клиент id не придумывает: он не знает, что уже занято.
+     */
     private function createStoryWithLevel(): void
     {
-        $this->postJson('/api/stories', [
-            'id' => 'story-1',
+        $this->storyId = $this->postJson('/api/stories', [
             'title' => 'First steps',
             'cover' => '#123',
-            'chapter' => ['id' => 'ch-1', 'title' => 'Basics', 'image' => '#456'],
-        ])->assertStatus(201);
+            'chapter' => ['title' => 'Basics', 'image' => '#456'],
+        ])->assertStatus(201)->json('id');
 
-        $this->postJson('/api/stories/story-1/levels', [
-            'id' => 'lvl-1',
-            'chapterId' => 'ch-1',
+        $this->chapterId = $this->getJson("/api/stories/{$this->storyId}")->json('chapters.0.id');
+
+        $this->levelId = $this->postJson("/api/stories/{$this->storyId}/levels", [
+            'chapterId' => $this->chapterId,
             'name' => 'Tower',
             'x' => 20,
             'y' => 60,
             'version' => 1,
-        ])->assertStatus(201);
+        ])->assertStatus(201)->json('id');
     }
 }

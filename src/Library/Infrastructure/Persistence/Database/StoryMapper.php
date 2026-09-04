@@ -14,8 +14,9 @@ use Wob\Library\Domain\ValueObject\Dimensions;
 use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
-use Wob\Library\Domain\ValueObject\MapEdge;
+use Wob\Library\Domain\ValueObject\CanvasRect;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 
@@ -52,6 +53,8 @@ final class StoryMapper
             $levels,
             $this->assetIds($story->hot),
             (int) $story->version,
+            $story->start_node_id,
+            (string) ($story->intro ?? ''),
         );
     }
 
@@ -59,26 +62,31 @@ final class StoryMapper
     {
         $nodes = array_map(
             static fn (stdClass $n): MapNode => new MapNode(
+                // Rows written before points had names of their own get one
+                // derived from the level they show. Deterministic on purpose:
+                // the same row must hydrate to the same id on every read, or
+                // anything holding a point by id would break on reload.
+                new NodeId($n->id ?? 'nd-' . $n->levelId),
                 new LevelId($n->levelId),
                 (float) $n->x,
                 (float) $n->y,
-                isset($n->next) ? new ChapterId($n->next) : null,
+                array_map(static fn (string $c): NodeId => new NodeId($c), $n->next ?? []),
+                (string) ($n->name ?? ''),
+                (string) ($n->image ?? ''),
+                (string) ($n->outro ?? ''),
             ),
             $this->decodeList($row->nodes),
         );
 
-        $edges = array_map(
-            static fn (stdClass $e): MapEdge => new MapEdge(new LevelId($e->from), new LevelId($e->to)),
-            $this->decodeList($row->edges),
-        );
 
         return new Chapter(
             new ChapterId($row->public_id),
             $row->title,
             $row->image,
             $nodes,
-            $edges,
             $this->assetIds($row->hot),
+            (string) ($row->map ?? ''),
+            CanvasRect::fromRow($row),
         );
     }
 
@@ -92,6 +100,8 @@ final class StoryMapper
             (int) $row->goal,
             array_map(EntityPlacement::fromObject(...), $this->decodeList($row->entities)),
             $this->assetIds($row->hot),
+            (string) ($row->image ?? ''),
+            (string) ($row->intro ?? ''),
         );
     }
 
@@ -103,6 +113,8 @@ final class StoryMapper
             "owner_id" => $story->ownerId->value,
             "title" => $story->title(),
             "cover" => $story->cover(),
+            "start_node_id" => $story->startNodeId(),
+            "intro" => $story->intro(),
             "hot" => $this->encode(array_map(static fn (AssetId $a): string => $a->value, $story->hot())),
             "content_hash" => $contentHash,
             "version" => $story->version(),
@@ -114,31 +126,38 @@ final class StoryMapper
     {
         $nodes = array_map(static function (MapNode $n): stdClass {
             $out = new stdClass();
+            $out->id = $n->id->value;
             $out->levelId = $n->levelId->value;
             $out->x = $n->x;
             $out->y = $n->y;
 
-            if ($n->next !== null) {
-                $out->next = $n->next->value;
+            if ($n->outro !== '') {
+                $out->outro = $n->outro;
+            }
+
+            $out->next = array_map(static fn (NodeId $c): string => $c->value, $n->next);
+
+            if ($n->name !== '') {
+                $out->name = $n->name;
+            }
+
+            if ($n->image !== '') {
+                $out->image = $n->image;
             }
 
             return $out;
         }, $chapter->nodes());
 
-        $edges = array_map(static function (MapEdge $e): stdClass {
-            $out = new stdClass();
-            $out->from = $e->from->value;
-            $out->to = $e->to->value;
-
-            return $out;
-        }, $chapter->edges());
-
         return [
             "public_id" => $chapter->id->value,
             "title" => $chapter->title(),
             "image" => $chapter->image(),
+            "map" => $chapter->map(),
+            "canvas_x" => $chapter->canvas()->x,
+            "canvas_y" => $chapter->canvas()->y,
+            "canvas_w" => $chapter->canvas()->w,
+            "canvas_h" => $chapter->canvas()->h,
             "nodes" => $this->encode($nodes),
-            "edges" => $this->encode($edges),
             "hot" => $this->encode(array_map(static fn (AssetId $a): string => $a->value, $chapter->hot())),
             "position" => $position,
             "content_hash" => $contentHash,
@@ -151,6 +170,7 @@ final class StoryMapper
         return [
             "public_id" => $level->id->value,
             "name" => $level->name(),
+            "image" => $level->image(),
             "width" => $level->dimensions()->width,
             "height" => $level->dimensions()->height,
             "gravity" => $this->encode($level->gravity()->toArray()),

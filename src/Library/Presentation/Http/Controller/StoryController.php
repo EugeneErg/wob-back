@@ -14,6 +14,7 @@ use Wob\Library\Application\Handler\DeleteStoryHandler;
 use Wob\Library\Application\Handler\UpdateStoryHandler;
 use Wob\Library\Application\Query\LibraryReadModel;
 use Wob\Library\Domain\Model\Story;
+use Wob\Library\Domain\Service\IdGenerator;
 
 final readonly class StoryController
 {
@@ -22,6 +23,7 @@ final readonly class StoryController
         private CreateStoryHandler $create,
         private UpdateStoryHandler $update,
         private DeleteStoryHandler $delete,
+        private IdGenerator $ids,
     ) {
     }
 
@@ -47,25 +49,32 @@ final readonly class StoryController
     public function create(Request $request): JsonResponse
     {
         $data = $request->validate([
-            "id" => ["required", "string", "max:64"],
+            // Идентификаторы чеканит сервер. Клиент их больше не присылает —
+            // и не может: браузер не знает, что уже занято, а имя, выданное до
+            // того, как о нём узнала база, живёт в двух местах сразу и рано или
+            // поздно расходится.
             "title" => ["required", "string", "max:200"],
             "cover" => ["required", "string", "max:2000"],
-            "chapter.id" => ["required", "string", "max:64"],
             "chapter.title" => ["required", "string", "max:200"],
             "chapter.image" => ["required", "string", "max:2000"],
         ]);
 
+        // Клиенту нужны оба имени: он кладёт историю и её первую главу к себе
+        // ровно под теми, что выдал сервер.
+        $storyId = $this->ids->next("story");
+        $chapterId = $this->ids->next("ch");
+
         $story = ($this->create)(new CreateStory(
             $this->owner($request),
-            $data["id"],
-            $data["chapter"]["id"],
+            $storyId,
+            $chapterId,
             $data["title"],
             $data["cover"],
             $data["chapter"]["title"],
             $data["chapter"]["image"],
         ));
 
-        return new JsonResponse($this->stamp($story), 201);
+        return new JsonResponse([...$this->stamp($story), "chapterId" => $chapterId], 201);
     }
 
     public function update(Request $request, string $storyId): JsonResponse
@@ -77,6 +86,8 @@ final readonly class StoryController
             "hot.*" => ["string", "max:64"],
             "chapterOrder" => ["nullable", "array"],
             "chapterOrder.*" => ["string", "max:64"],
+            "startNodeId" => ["nullable", "string", "max:64"],
+            "intro" => ["nullable", "string", "max:2000"],
             "version" => ["required", "integer", "min:0"],
         ]);
 
@@ -88,6 +99,8 @@ final readonly class StoryController
             $data["hot"] ?? null,
             $data["chapterOrder"] ?? null,
             (int) $data["version"],
+            $data["startNodeId"] ?? null,
+            $data["intro"] ?? null,
         ));
 
         return new JsonResponse($this->stamp($story));

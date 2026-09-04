@@ -85,11 +85,18 @@ final class RouteProgress
         return new RouteCompletion($done, count($onRoute));
     }
 
-    /** A chapter nothing leads on from: the story ends here, or on a branch of it. */
+    /**
+     * A chapter nothing leads on from: the story ends here, or on a branch.
+     *
+     * A point that links nowhere is an ending, so a chapter whose points all
+     * link nowhere is where a route stops. Links may now leave the chapter, and
+     * that is exactly the case this has to catch: a chapter with an outgoing
+     * link is somewhere the story passes through, not somewhere it finishes.
+     */
     private function isEnding(stdClass $chapter): bool
     {
         foreach ($chapter->nodes ?? [] as $node) {
-            if (isset($node->next) && $node->next !== null) {
+            if (($node->next ?? []) !== []) {
                 return false;
             }
         }

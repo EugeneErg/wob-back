@@ -61,7 +61,6 @@ final class ContentGate
     {
         $trimmed = clone $chapter;
         $trimmed->nodes = $chapter->nodes ?? [];
-        $trimmed->edges = $chapter->edges ?? [];
 
         return $trimmed;
     }

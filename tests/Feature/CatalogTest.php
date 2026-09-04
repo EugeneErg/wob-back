@@ -17,6 +17,7 @@ use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\Gravity;
 use Wob\Library\Domain\ValueObject\LevelId;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Publishing\Application\Command\PublishRelease;
@@ -226,7 +227,7 @@ final class CatalogTest extends TestCase
                     3,
                     [$this->entity("e{$c}{$l}")],
                 );
-                $nodes[] = new MapNode($levelId, 10.0 * $l, 50.0);
+                $nodes[] = new MapNode(new NodeId('nd-' . $levelId->value), $levelId, 10.0 * $l, 50.0);
             }
 
             $chapters[] = new Chapter(new ChapterId("ch-{$c}"), "Chapter {$c}", '#123', $nodes);

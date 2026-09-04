@@ -12,6 +12,7 @@ use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\ContentHash;
 use Wob\Library\Domain\ValueObject\LevelId;
 use Wob\Library\Domain\ValueObject\MapNode;
+use Wob\Library\Domain\ValueObject\NodeId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
 use Wob\Shared\Domain\AggregateRoot;
@@ -67,6 +68,16 @@ final class Story extends AggregateRoot
         array $levels = [],
         private array $hot = [],
         private int $version = self::NEW,
+
+        // The point a player starts on — a place, not a chapter: which chapter
+        // it sits in is something the point already knows. Structure, so it
+        // reaches contentHash(); covers and films do not.
+        private ?string $startNodeId = null,
+
+        // Plays once, before the story does. The only film that runs before
+        // play rather than after it, which is what keeps a new player from
+        // waiting twice over.
+        private string $intro = '',
     ) {
         $this->rename($title);
 
@@ -77,6 +88,13 @@ final class Story extends AggregateRoot
         foreach ($chapters as $chapter) {
             $this->chapters[$chapter->id->value] = $chapter;
         }
+
+        // Rows written before stories had a start, and stories built with a
+        // chapter already in hand, both land here with nothing chosen. The
+        // first chapter takes it, which is exactly what the old
+        // order-implies-the-opening behaviour did — so nothing that already
+        // exists changes meaning, it just says out loud what it always meant.
+        $this->startNodeId ??= $this->firstNodeId();
 
         $this->assertReferencesResolve();
     }
@@ -173,6 +191,93 @@ final class Story extends AggregateRoot
         $this->hot = array_values($hot);
     }
 
+    public function startNodeId(): ?string
+    {
+        return $this->startNodeId;
+    }
+
+    public function intro(): string
+    {
+        return $this->intro;
+    }
+
+    public function setIntro(string $intro): void
+    {
+        $this->intro = $intro;
+    }
+
+    /** The chapter holding a point, which is how a point names its chapter. */
+    public function chapterOf(NodeId $nodeId): ?ChapterId
+    {
+        foreach ($this->chapters as $chapter) {
+            foreach ($chapter->nodes() as $node) {
+                if ($node->id->equals($nodeId)) {
+                    return $chapter->id;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function firstNodeId(): ?string
+    {
+        foreach ($this->chapters as $chapter) {
+            foreach ($chapter->nodes() as $node) {
+                return $node->id->value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Choose where the story begins.
+     *
+     * Chapter order used to imply this, which was never quite a decision: the
+     * order is the unlock order, and the chapter a player meets first is a
+     * separate thing an author should be able to say out loud. Naming a chapter
+     * that is not in this story would leave a story that opens onto nothing, so
+     * it is refused here rather than discovered on the way in.
+     */
+    public function startOn(?string $nodeId): void
+    {
+        if ($nodeId !== null && $this->chapterOf(new NodeId($nodeId)) === null) {
+            throw InvariantViolation::because(
+                sprintf('Point %s is not in this story, so it cannot start it', $nodeId),
+            );
+        }
+
+        $this->startNodeId = $nodeId;
+    }
+
+    /**
+     * Save a chapter's map, then check it against the whole story.
+     *
+     * The chapter validates what it can see on its own — ids unique, points
+     * well formed — but a link may land in another chapter now, so whether it
+     * resolves is a question only the story can answer. Rejecting restores the
+     * old map: a half-applied map is worse than a refused one, because it looks
+     * fine and gates the wrong places.
+     *
+     * @param list<MapNode> $nodes
+     */
+    public function replaceChapterMap(ChapterId $chapterId, array $nodes): void
+    {
+        $chapter = $this->chapter($chapterId);
+        $before = $chapter->nodes();
+
+        $chapter->replaceMap($nodes);
+
+        try {
+            $this->assertReferencesResolve();
+        } catch (InvariantViolation $e) {
+            $chapter->replaceMap($before);
+
+            throw $e;
+        }
+    }
+
     public function addChapter(Chapter $chapter): void
     {
         if (isset($this->chapters[$chapter->id->value])) {
@@ -182,6 +287,13 @@ final class Story extends AggregateRoot
         }
 
         $this->chapters[$chapter->id->value] = $chapter;
+
+        // The first point to arrive takes the slot. An author who never thinks
+        // about this still gets a story that opens somewhere sensible, and one
+        // who does can say otherwise at any time. A chapter with no points yet
+        // claims nothing — there is no place to stand in it.
+        $this->startNodeId ??= $this->firstNodeId();
+
         $this->assertReferencesResolve();
     }
 
@@ -225,8 +337,20 @@ final class Story extends AggregateRoot
         $chapter = $this->chapter($id);
         unset($this->chapters[$id->value]);
 
+        $gone = $chapter->nodeIds();
+
+        // Losing the opening point must not leave the story pointing at a place
+        // that is gone. The first surviving point inherits it.
+        foreach ($gone as $nodeId) {
+            if ($this->startNodeId === $nodeId->value) {
+                $this->startNodeId = $this->firstNodeId();
+
+                break;
+            }
+        }
+
         foreach ($this->chapters as $other) {
-            $other->forgetExitsTo($id);
+            $other->forgetLinksTo(...$gone);
         }
 
         $orphans = [];
@@ -249,6 +373,26 @@ final class Story extends AggregateRoot
      * presentation decision, but the pinning happens here so that "every level
      * belongs to at least one map" holds by construction.
      */
+    /**
+     * Уровень без места на карте.
+     *
+     * Автор делает уровень в панели, наполняет его и только потом решает, в
+     * какую главу положить. До этого момента точки у него нет — и раньше такого
+     * состояния здесь не было вовсе, поэтому редактор сохранял уровень, которого
+     * на сервере не существует, и получал 404 в бесконечном цикле.
+     *
+     * Уровень принадлежит истории, а не главе (levels.story_id), так что место
+     * для него тут было с самого начала — не хватало только способа его создать.
+     */
+    public function addSpareLevel(Level $level): void
+    {
+        if (isset($this->levels[$level->id->value])) {
+            throw InvariantViolation::because(sprintf("Level %s is already in this story", $level->id->value));
+        }
+
+        $this->levels[$level->id->value] = $level;
+    }
+
     public function addLevel(ChapterId $chapterId, Level $level, MapNode $node): void
     {
         if (isset($this->levels[$level->id->value])) {
@@ -261,6 +405,11 @@ final class Story extends AggregateRoot
 
         $this->levels[$level->id->value] = $level;
         $this->chapter($chapterId)->pin($node);
+
+        // The very first place to exist in this story opens it. Stories are
+        // built a level at a time, so this is usually where the slot is
+        // claimed, not in the constructor.
+        $this->startNodeId ??= $node->id->value;
     }
 
     /**
@@ -330,6 +479,12 @@ final class Story extends AggregateRoot
         return new ContentHash($hasher->hash([
             "id" => $this->id->value,
             "title" => $this->title,
+
+            // Which chapter opens the story is content, not decoration: change
+            // it and players meet a different story. Intro films and covers are
+            // absent from here for the opposite reason.
+            "start" => $this->startNodeId ?? "",
+
             "chapters" => array_map(
                 fn (Chapter $c): string => $c->id->value
                     . ":" . $this->chapterHash($hasher, $c)->value
@@ -384,12 +539,17 @@ final class Story extends AggregateRoot
                     ));
                 }
 
-                if ($node->next !== null && !isset($this->chapters[$node->next->value])) {
-                    throw InvariantViolation::because(sprintf(
-                        "Chapter %s leads out to chapter %s, which is not in this story",
-                        $chapter->id->value,
-                        $node->next->value,
-                    ));
+                foreach ($node->next as $child) {
+                    // A link may cross into another chapter or stay put, so the
+                    // whole story is the scope here — a chapter on its own can
+                    // no longer tell whether a link resolves.
+                    if ($this->chapterOf($child) === null) {
+                        throw InvariantViolation::because(sprintf(
+                            "Point %s leads to point %s, which is not in this story",
+                            $node->id->value,
+                            $child->value,
+                        ));
+                    }
                 }
             }
         }
