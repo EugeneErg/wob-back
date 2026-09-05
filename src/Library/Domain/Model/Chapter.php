@@ -154,6 +154,41 @@ final class Chapter
      * level that is no longer on the map would show the player a road to nowhere
      * and, worse, would gate the levels behind it forever.
      */
+    /**
+     * Заменить одну точку, не трогая остальные.
+     *
+     * Соседний replaceMap() меняет набор целиком и потому спорит с любой другой
+     * правкой этой главы — даже если руки заняты разными точками. Здесь
+     * правится ровно то, что назвали.
+     */
+    public function replaceNode(MapNode $node): void
+    {
+        foreach ($this->nodes as $i => $existing) {
+            if ($existing->id->value === $node->id->value) {
+                $this->nodes[$i] = $node;
+
+                return;
+            }
+        }
+
+        throw InvariantViolation::because(sprintf(
+            "Chapter %s has no point %s",
+            $this->id->value,
+            $node->id->value,
+        ));
+    }
+
+    public function node(NodeId $id): ?MapNode
+    {
+        foreach ($this->nodes as $node) {
+            if ($node->id->value === $id->value) {
+                return $node;
+            }
+        }
+
+        return null;
+    }
+
     public function unpin(LevelId $levelId): void
     {
         $gone = [];

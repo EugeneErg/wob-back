@@ -35,6 +35,10 @@ use Wob\Publishing\Presentation\Http\Controller\VoteController;
 
 Route::post("auth/google", [AuthController::class, "google"]);
 
+// Вход без Google. Отвечает 404 везде, кроме локальной разработки с явно
+// включённым WOB_DEV_LOGIN — см. AuthController::dev.
+Route::post("auth/dev", [AuthController::class, "dev"]);
+
 // The catalogue is open, and trimmed for whoever is looking. A signed-out
 // visitor gets the first canonical story with one playable level in it; the
 // rest of the content is not sent, so there is nothing in the browser to
@@ -79,6 +83,24 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
 
     Route::post("stories/{storyId}/chapters", [ChapterController::class, "create"]);
     Route::put("stories/{storyId}/chapters/{chapterId}/map", [ChapterController::class, "saveMap"]);
+
+    /*
+     * Мелкие правки карты: по одной на каждое движение руки.
+     *
+     * Соседний map выше отправляет карту целиком, и это неверная единица
+     * записи: подвинул одну точку — уехал весь набор, так что две правки в
+     * одной главе всегда спорили, даже если касались разных мест. Спор разнимали
+     * номером версии, а номер приходилось угадывать клиенту.
+     *
+     * Эти четыре ничего не угадывают и ни с чем не спорят: разные точки не
+     * пересекаются, одна и та же сходится к последней правке.
+     */
+    Route::patch("stories/{storyId}/chapters/{chapterId}", [ChapterController::class, "describe"]);
+    Route::patch("stories/{storyId}/chapters/{chapterId}/nodes/{nodeId}", [ChapterController::class, "editNode"]);
+    Route::post("stories/{storyId}/links", [ChapterController::class, "link"]);
+    // Концы связи в адресе, а не в теле: тело у DELETE переживает не всякий
+    // прокси и не всякий клиент, и терять его молча — худший из исходов.
+    Route::delete("stories/{storyId}/links/{from}/{to}", [ChapterController::class, "unlink"]);
     Route::delete("stories/{storyId}/chapters/{chapterId}", [ChapterController::class, "destroy"]);
 
     Route::post("stories/{storyId}/levels", [LevelController::class, "create"]);
@@ -106,7 +128,18 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
     // Editing someone else's story, and offering the result back. The fork is
     // born on the first change, never on merely opening the editor.
     Route::post("releases/{releaseId}/edit", [ForkController::class, "edit"]);
+    /*
+     * Форк чужой истории.
+     *
+     * Маршрутов сюда не было вовсе, хотя контроллер и обработчики написаны:
+     * форкнуть нельзя было ничего, включая канон. Тот же случай, что с
+     * POST /points — готовое звено без двери наружу.
+     */
+    Route::post("releases/{releaseId}/fork", [ForkController::class, "fork"]);
+    Route::put("releases/{releaseId}/edit", [ForkController::class, "edit"]);
     Route::post("forks/{forkStoryId}/propose", [ForkController::class, "propose"]);
+    Route::get("stories/{storyId}/pulls", [ForkController::class, "index"]);
+    Route::post("pulls/{pullRequestId}/decide", [ForkController::class, "decide"]);
     Route::get("stories/{storyId}/pull-requests", [ForkController::class, "index"]);
     Route::post("pull-requests/{pullRequestId}/decide", [ForkController::class, "decide"]);
 
@@ -114,6 +147,12 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
     Route::get("stories/{storyId}/slots", [SlotController::class, "index"]);
     Route::post("stories/{storyId}/slots", [SlotController::class, "create"]);
     Route::patch("slots/{slotId}", [SlotController::class, "update"]);
+
+    // Доиграть начатое на более свежей версии. GET спрашивает, можно ли;
+    // POST переносит. Разделены потому, что предложение надо показать до того,
+    // как игрок согласится, — иначе выбора у него нет.
+    Route::get("slots/{slotId}/upgrade", [SlotController::class, "upgrade"]);
+    Route::post("slots/{slotId}/upgrade", [SlotController::class, "upgrade"]);
     Route::post("slots/{slotId}/erase", [SlotController::class, "erase"]);
     Route::delete("slots/{slotId}", [SlotController::class, "destroy"]);
 

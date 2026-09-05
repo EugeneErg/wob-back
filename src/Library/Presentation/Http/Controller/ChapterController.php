@@ -9,7 +9,9 @@ use Illuminate\Http\Request;
 use Wob\Library\Application\Command\CreateChapter;
 use Wob\Library\Application\Command\DeleteChapter;
 use Wob\Library\Application\Command\SaveChapterMap;
+use Wob\Library\Application\Command\EditMap;
 use Wob\Library\Application\Handler\CreateChapterHandler;
+use Wob\Library\Application\Handler\EditMapHandler;
 use Wob\Library\Application\Handler\DeleteChapterHandler;
 use Wob\Library\Application\Handler\SaveChapterMapHandler;
 use Wob\Library\Domain\Service\IdGenerator;
@@ -21,7 +23,80 @@ final readonly class ChapterController
         private SaveChapterMapHandler $saveMap,
         private DeleteChapterHandler $delete,
         private IdGenerator $ids,
+        private EditMapHandler $edit,
     ) {
+    }
+
+    /*
+     * Мелкие правки карты.
+     *
+     * Каждая — про один объект и ничего не знает об остальной карте. Версии тут
+     * нет и быть не должно: две правки разных точек не пересекаются, а две
+     * правки одной сходятся к последней.
+     */
+
+    public function describe(Request $request, string $storyId, string $chapterId): JsonResponse
+    {
+        $data = $request->validate([
+            "title" => ["required", "string", "max:200"],
+            "image" => ["nullable", "string", "max:2000"],
+            "map" => ["nullable", "string", "max:2000"],
+        ]);
+
+        ($this->edit)(EditMap::chapter(
+            $this->owner($request),
+            $storyId,
+            $chapterId,
+            $data["title"],
+            (string) ($data["image"] ?? ""),
+            (string) ($data["map"] ?? ""),
+        ));
+
+        return new JsonResponse(["ok" => true]);
+    }
+
+    public function editNode(Request $request, string $storyId, string $chapterId, string $nodeId): JsonResponse
+    {
+        $data = $request->validate([
+            "x" => ["nullable", "numeric", "between:0,100"],
+            "y" => ["nullable", "numeric", "between:0,100"],
+            "name" => ["nullable", "string", "max:200"],
+            "image" => ["nullable", "string", "max:2000"],
+            "outro" => ["nullable", "string", "max:2000"],
+        ]);
+
+        ($this->edit)(EditMap::node(
+            $this->owner($request),
+            $storyId,
+            $chapterId,
+            $nodeId,
+            isset($data["x"]) ? (float) $data["x"] : null,
+            isset($data["y"]) ? (float) $data["y"] : null,
+            $data["name"] ?? null,
+            $data["image"] ?? null,
+            $data["outro"] ?? null,
+        ));
+
+        return new JsonResponse(["ok" => true]);
+    }
+
+    public function link(Request $request, string $storyId): JsonResponse
+    {
+        $data = $request->validate([
+            "from" => ["required", "string", "max:64"],
+            "to" => ["required", "string", "max:64"],
+        ]);
+
+        ($this->edit)(EditMap::link($this->owner($request), $storyId, $data["from"], $data["to"], true));
+
+        return new JsonResponse(["ok" => true], 201);
+    }
+
+    public function unlink(Request $request, string $storyId, string $from, string $to): JsonResponse
+    {
+        ($this->edit)(EditMap::link($this->owner($request), $storyId, $from, $to, false));
+
+        return new JsonResponse(["ok" => true]);
     }
 
     public function create(Request $request, string $storyId): JsonResponse
@@ -29,7 +104,6 @@ final readonly class ChapterController
         $data = $request->validate([
             "title" => ["required", "string", "max:200"],
             "image" => ["required", "string", "max:2000"],
-            "version" => ["required", "integer", "min:0"],
         ]);
 
         // Имя выдаёт сервер и возвращает его клиенту.
@@ -41,7 +115,6 @@ final readonly class ChapterController
             $chapterId,
             $data["title"],
             $data["image"],
-            (int) $data["version"],
         ));
 
         return new JsonResponse(["id" => $chapterId, "version" => $story->version()], 201);
@@ -68,7 +141,6 @@ final readonly class ChapterController
             "nodes.*.y" => ["required", "numeric", "between:0,100"],
             "nodes.*.next" => ["nullable", "array"],
             "nodes.*.next.*" => ["string", "max:64"],
-            "version" => ["required", "integer", "min:0"],
         ]);
 
         $story = ($this->saveMap)(new SaveChapterMap(
@@ -78,7 +150,6 @@ final readonly class ChapterController
             $data["title"] ?? null,
             $data["image"] ?? null,
             $data["nodes"],
-            (int) $data["version"],
             $data["map"] ?? null,
             $data["canvas"] ?? null,
         ));
@@ -88,13 +159,10 @@ final readonly class ChapterController
 
     public function destroy(Request $request, string $storyId, string $chapterId): JsonResponse
     {
-        $data = $request->validate(["version" => ["required", "integer", "min:0"]]);
-
         $story = ($this->delete)(new DeleteChapter(
             $this->owner($request),
             $storyId,
             $chapterId,
-            (int) $data["version"],
         ));
 
         return new JsonResponse(["version" => $story->version()]);

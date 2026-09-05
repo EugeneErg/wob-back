@@ -81,22 +81,18 @@ final readonly class DatabaseCatalogReadModel implements CatalogReadModel
 
     public function play(string $storyId, ?string $playerId): ?array
     {
-        $row = $this->db->table('stories')
-            ->leftJoin('releases', 'releases.id', '=', 'stories.canonical_release_id')
-            ->where('stories.public_id', $storyId)
-            ->select([
-                'stories.public_id',
-                'stories.title',
-                'stories.canonical_release_id',
-                'stories.canonical_since',
-                'releases.id as release_id',
-                'releases.number as version',
-                'releases.content',
-                'releases.content_hash',
-            ])
+        $story = $this->db->table('stories')
+            ->where('public_id', $storyId)
+            ->select(['id', 'public_id', 'title', 'canonical_release_id', 'start_node_id'])
             ->first();
 
-        if ($row === null || $row->release_id === null) {
+        if ($story === null) {
+            return null;
+        }
+
+        $row = $this->playableRelease($story);
+
+        if ($row === null) {
             return null;
         }
 
@@ -120,15 +116,58 @@ final readonly class DatabaseCatalogReadModel implements CatalogReadModel
         }
 
         return [
-            'id' => $row->public_id,
-            'title' => $row->title,
+            'id' => $story->public_id,
+            'title' => $story->title,
             'releaseId' => $row->release_id,
             'version' => (int) $row->version,
             'hash' => $row->content_hash,
             'preview' => $preview,
             'chapters' => $content->chapters,
             'levels' => $content->levels,
+            // Откуда начинать. Берётся из замороженного снимка, а у релизов,
+            // нарезанных до его появления, — из самой истории: иначе игрок
+            // открывает их и не знает, с чего начать.
+            'startNodeId' => $content->startNodeId ?? $story->start_node_id ?? null,
         ];
+    }
+
+    /**
+     * Та версия истории, которую этот игрок и получит.
+     *
+     * Раньше здесь стоял join по canonical_release_id, и из-за него выдача
+     * отвечала не на тот вопрос, на который отвечали списки. published() уже
+     * показывал истории, выпущенные и пройденные автором, а играть их было
+     * нельзя: без короны канона join не находил ничего и возвращался 404. То
+     * есть автор выпускал историю, видел её на витрине и не мог открыть.
+     *
+     * Теперь правило одно и совпадает со списками: коронованная история играется
+     * ровно в той версии, которую короновали, — иначе слово «канон» перестанет
+     * что-либо значить, ведь корона выдана конкретному релизу и конкретному его
+     * содержимому. Всё остальное играется в последнем релизе, который автор
+     * выпустил и сам прошёл целиком.
+     */
+    private function playableRelease(object $story): ?object
+    {
+        $select = [
+            'releases.id as release_id',
+            'releases.number as version',
+            'releases.content',
+            'releases.content_hash',
+        ];
+
+        if ($story->canonical_release_id !== null) {
+            return $this->db->table('releases')
+                ->where('id', $story->canonical_release_id)
+                ->select($select)
+                ->first();
+        }
+
+        return $this->db->table('releases')
+            ->where('story_id', $story->id)
+            ->whereNotNull('author_cleared_at')
+            ->orderByDesc('number')
+            ->select($select)
+            ->first();
     }
 
     /** @return array<string, mixed> */

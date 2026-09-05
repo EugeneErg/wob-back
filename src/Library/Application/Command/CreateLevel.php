@@ -15,7 +15,6 @@ final readonly class CreateLevel
         public string $name,
         public float $mapX,
         public float $mapY,
-        public int $expectedVersion,
 
         // The editor may name the point itself. When it does not, the handler
         // derives one from the level, which is the only sane default while a

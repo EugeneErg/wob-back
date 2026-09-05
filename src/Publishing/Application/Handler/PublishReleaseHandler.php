@@ -198,6 +198,6 @@ final readonly class PublishReleaseHandler
             $levels[] = $entry;
         }
 
-        return new ContentSnapshot($chapters, $levels);
+        return new ContentSnapshot($chapters, $levels, $story->startNodeId());
     }
 }

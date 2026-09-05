@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Ramsey\Uuid\Uuid;
 use Wob\Library\Domain\ValueObject\StoryId;
+use Wob\Publishing\Domain\Model\Release;
 use Wob\Publishing\Domain\Model\SaveSlot;
 use Wob\Publishing\Domain\Repository\ReleaseRepository;
 use Wob\Publishing\Domain\Repository\SaveSlotRepository;
@@ -29,6 +30,7 @@ final readonly class SlotController
         private SaveSlotRepository $slots,
         private ReleaseRepository $releases,
         private Clock $clock,
+        private \Illuminate\Database\ConnectionInterface $db,
     ) {
     }
 
@@ -83,6 +85,101 @@ final readonly class SlotController
         $this->slots->save($slot);
 
         return new JsonResponse($this->present($slot), 201);
+    }
+
+    /**
+     * Можно ли доиграть начатое на более свежей версии.
+     *
+     * Прогон привязан к версии, на которой начат, и доигрывается на ней: иначе
+     * содержимое поменялось бы под руками в середине истории. Но застревать на
+     * старой версии навсегда тоже неверно — автор мог выпустить продолжение
+     * ровно там, где игрок остановился.
+     *
+     * Правило перехода простое и берётся из того, что игрок уже прожил:
+     * последний пройденный им уровень должен существовать и в новой версии.
+     * Тогда «следующий» в новой версии — осмысленное продолжение того же пути.
+     * Если этого уровня там нет, игрок оказался бы посреди истории, которой не
+     * проходил, и перехода не предлагается.
+     *
+     * Уже пройденное засчитывается, даже если автор эти уровни переделал: игрок
+     * прожил эту часть истории, и заставлять его проходить её заново из-за
+     * чужой правки — наказание за то, что он играл раньше других. Рекорды при
+     * этом остаются привязаны к своей версии и не смешиваются.
+     */
+    public function upgrade(Request $request, string $slotId): JsonResponse
+    {
+        $slot = $this->slots->find($slotId, $this->player($request)) ?? throw NotFound::of('Slot', $slotId);
+        $offer = $this->offerFor($slot);
+
+        if ($request->isMethod('get')) {
+            return new JsonResponse($offer);
+        }
+
+        if (!$offer['available']) {
+            throw InvariantViolation::because($offer['reason']);
+        }
+
+        $slot->moveTo(new ReleaseId($offer['releaseId']));
+        $this->slots->save($slot);
+
+        return new JsonResponse($this->present($slot));
+    }
+
+    /** @return array<string, mixed> */
+    private function offerFor(SaveSlot $slot): array
+    {
+        $no = static fn (string $why): array => ['available' => false, 'reason' => $why];
+
+        $current = $slot->releaseId() === null ? null : $this->releases->find($slot->releaseId());
+        $newest = $this->releases->latestOf($slot->storyId);
+
+        if ($newest === null || $current === null) {
+            return $no('Этой истории не на что обновлять.');
+        }
+
+        if (!$newest->isClearedByAuthor()) {
+            return $no('Новая версия ещё не пройдена автором, поэтому недоступна.');
+        }
+
+        if ($newest->number <= $current->number) {
+            return $no('Вы уже играете самую свежую версию.');
+        }
+
+        $last = $this->lastClearedLevel($slot);
+
+        if ($last === null) {
+            // Ничего не пройдено — переносить нечего, можно просто начать заново
+            // на новой версии.
+            return $this->yes($newest, 'Вы ещё не начинали — можно сразу перейти на новую версию.');
+        }
+
+        if ($newest->content->level($last) === null) {
+            return $no('В новой версии нет уровня, на котором вы остановились, — доиграйте эту.');
+        }
+
+        return $this->yes($newest, 'Можно продолжить со следующего уровня уже в новой версии.');
+    }
+
+    /** @return array<string, mixed> */
+    private function yes(Release $release, string $why): array
+    {
+        return [
+            'available' => true,
+            'reason' => $why,
+            'releaseId' => $release->id->value,
+            'version' => $release->number,
+        ];
+    }
+
+    /** Последний уровень, пройденный в этом прогоне. */
+    private function lastClearedLevel(SaveSlot $slot): ?string
+    {
+        $row = $this->db->table('level_completions')
+            ->where('slot_id', $slot->id)
+            ->orderByDesc('last_completed_at')
+            ->first();
+
+        return $row === null ? null : (string) $row->level_public_id;
     }
 
     public function update(Request $request, string $slotId): JsonResponse

@@ -23,7 +23,6 @@ final readonly class DeleteLevelHandler
     {
         $owner = new OwnerId($command->ownerId);
         $story = $this->stories->get($owner, new StoryId($command->storyId));
-        $story->expectVersion($command->expectedVersion);
         $story->removeLevel(new ChapterId($command->chapterId), new LevelId($command->levelId));
 
         $this->stories->save($story);

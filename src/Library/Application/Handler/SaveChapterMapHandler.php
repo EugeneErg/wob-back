@@ -25,7 +25,6 @@ final readonly class SaveChapterMapHandler
     {
         $owner = new OwnerId($command->ownerId);
         $story = $this->stories->get($owner, new StoryId($command->storyId));
-        $story->expectVersion($command->expectedVersion);
 
         $chapter = $story->chapter(new ChapterId($command->chapterId));
 

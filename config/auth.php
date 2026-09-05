@@ -3,6 +3,16 @@
 declare(strict_types=1);
 
 return [
+
+    /*
+     * Вход без Google для локальной разработки.
+     *
+     * Работает только вместе с APP_ENV=local: одного флага недостаточно
+     * намеренно, потому что цена случайно включённого в проде — вход в любой
+     * аккаунт по имени почты.
+     */
+    "dev_login" => env("WOB_DEV_LOGIN", false),
+
     'defaults' => [
         'guard' => 'web',
         'passwords' => 'users',

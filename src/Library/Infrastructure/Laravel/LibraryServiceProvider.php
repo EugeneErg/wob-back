@@ -43,8 +43,12 @@ final class LibraryServiceProvider extends ServiceProvider
             $c->make("db")->connection(),
         ));
 
+        // Библиотека знает про форки: у копии своего содержимого нет, пока её
+        // не тронули, и на все вопросы до этого отвечает базовый релиз.
         $this->app->singleton(LibraryReadModel::class, static fn (Container $c): LibraryReadModel => new DatabaseLibraryReadModel(
             $c->make("db")->connection(),
+            $c->make(\Wob\Publishing\Domain\Repository\ReleaseRepository::class),
+            $c->make(\Wob\Publishing\Domain\Repository\ForkOverrideRepository::class),
         ));
     }
 }

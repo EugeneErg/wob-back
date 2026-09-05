@@ -5,12 +5,19 @@ declare(strict_types=1);
 namespace Wob\Library\Infrastructure\Persistence\Database;
 
 use Illuminate\Database\ConnectionInterface;
+use Wob\Library\Domain\ValueObject\StoryId;
+use Wob\Publishing\Domain\Repository\ForkOverrideRepository;
+use Wob\Publishing\Domain\Repository\ReleaseRepository;
+use Wob\Publishing\Domain\ValueObject\ReleaseId;
 use Wob\Library\Application\Query\LibraryReadModel;
 
 final readonly class DatabaseLibraryReadModel implements LibraryReadModel
 {
-    public function __construct(private ConnectionInterface $db)
-    {
+    public function __construct(
+        private ConnectionInterface $db,
+        private ReleaseRepository $releases,
+        private ForkOverrideRepository $overrides,
+    ) {
     }
 
     public function shelfOf(string $ownerId): array
@@ -91,6 +98,20 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             ->map($this->levelRow(...))
             ->all();
 
+        /*
+         * У форка своего содержимого нет, пока его не тронули.
+         *
+         * Копирование намеренно ленивое: главы и уровни появляются у копии по
+         * мере того, как автор их правит, а до тех пор на все вопросы отвечает
+         * базовый релиз. Но отвечать он должен и на этот вопрос тоже — иначе
+         * человек, взявший историю себе, открывает редактор и видит пустоту,
+         * хотя не удалял ничего.
+         *
+         * Наложение уже написано и используется при выдаче игрокам; здесь оно
+         * просто применяется ещё и к чтению автором.
+         */
+        [$chapters, $levels] = $this->throughFork($story, $chapters, $levels);
+
         return [
             "id" => $story->public_id,
             "title" => $story->title,
@@ -103,6 +124,59 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             "chapters" => $chapters,
             "levels" => $levels,
         ];
+    }
+
+    /**
+     * Содержимое форка: базовый релиз, поверх которого легло изменённое.
+     *
+     * @param list<array<string, mixed>> $own
+     * @param list<array<string, mixed>> $ownLevels
+     *
+     * @return array{0: list<mixed>, 1: list<mixed>}
+     */
+    private function throughFork(object $story, array $own, array $ownLevels): array
+    {
+        if (($story->forked_from_release_id ?? null) === null) {
+            return [$own, $ownLevels];
+        }
+
+        $base = $this->releases->find(new ReleaseId((string) $story->forked_from_release_id));
+
+        if ($base === null) {
+            return [$own, $ownLevels];
+        }
+
+        $flat = $this->overrides
+            ->overlayFor(new StoryId((string) $story->public_id), $base->content)
+            ->flatten();
+
+        /*
+         * Наложение отдаёт объекты — это формат замороженного снимка. Остальная
+         * библиотека читает главы и уровни как массивы, поэтому здесь их надо
+         * привести, а не оставить как есть: иначе выгрузка падает на первом же
+         * обращении к главе по ключу.
+         */
+        $asArrays = static fn (array $items): array => (array) json_decode(
+            (string) json_encode($items),
+            true,
+        );
+
+        /*
+         * Снимок релиза не несёт полей, которые есть у черновика: hot — это
+         * полка мастерской автора, а не часть выпущенной истории. Недостающее
+         * достраивается пустым, иначе выгрузка спотыкается на первом же чтении.
+         */
+        $fill = static function (array $items) use ($asArrays): array {
+            $out = [];
+
+            foreach ($asArrays($items) as $item) {
+                $out[] = $item + ['hot' => [], 'nodes' => [], 'entities' => []];
+            }
+
+            return $out;
+        };
+
+        return [$fill($flat->chapters), $fill($flat->levels)];
     }
 
     public function storyBundle(string $storyId, string $ownerId): ?array

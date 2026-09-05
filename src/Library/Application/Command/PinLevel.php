@@ -21,7 +21,6 @@ final readonly class PinLevel
         public string $nodeId,
         public float $mapX,
         public float $mapY,
-        public int $expectedVersion,
     ) {
     }
 }

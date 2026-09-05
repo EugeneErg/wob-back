@@ -37,6 +37,16 @@ use Wob\Shared\Domain\Exception\InvariantViolation;
  */
 final readonly class MapNode
 {
+    /*
+     * Точечные правки.
+     *
+     * Раньше единицей записи была карта целиком: подвинул одну точку — уехал
+     * весь набор точек и связей. Из-за этого две правки в одной главе всегда
+     * спорили, даже если касались разных мест, и спор приходилось разнимать
+     * номером версии. Здесь набор мелких копий, из которых складываются
+     * отдельные операции: «эта точка теперь здесь», «эта связь появилась».
+     */
+
     /** @var list<NodeId> */
     public array $next;
 
@@ -108,6 +118,32 @@ final readonly class MapNode
     }
 
     /** A point leading nowhere is an ending. One beginning, many of these. */
+    public function movedTo(float $x, float $y): self
+    {
+        return new self($this->id, $this->levelId, $x, $y, $this->next, $this->name, $this->image, $this->outro);
+    }
+
+    public function describedAs(string $name, string $image, string $outro): self
+    {
+        return new self($this->id, $this->levelId, $this->x, $this->y, $this->next, $name, $image, $outro);
+    }
+
+    public function leadingTo(NodeId $to): self
+    {
+        foreach ($this->next as $existing) {
+            if ($existing->value === $to->value) {
+                return $this;
+            }
+        }
+
+        return $this->withNext([...$this->next, $to]);
+    }
+
+    public function notLeadingTo(NodeId $to): self
+    {
+        return $this->withoutLinksTo($to);
+    }
+
     public function isEnding(): bool
     {
         return $this->next === [];

@@ -22,7 +22,6 @@ final readonly class DeleteChapterHandler
     {
         $owner = new OwnerId($command->ownerId);
         $story = $this->stories->get($owner, new StoryId($command->storyId));
-        $story->expectVersion($command->expectedVersion);
 
         // Everything that follows from this — orphaned levels dropped, exits
         // that led here cleared — happens inside the aggregate. The handler

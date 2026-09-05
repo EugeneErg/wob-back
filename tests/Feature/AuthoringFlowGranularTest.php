@@ -68,19 +68,30 @@ final class AuthoringFlowGranularTest extends TestCase
      * quietly overwrite the first. The queue stops on a conflict rather than
      * continuing blind.
      */
-    public function testAStaleWriteIsRefused(): void
+    /**
+     * Второе устройство не знает о первом — и это ничему не мешает.
+     *
+     * Здесь стояла обратная проверка: отставшая запись отвергалась с 409. От
+     * этого отказались, и отказ стоит объяснить. Создание уровня ничего не
+     * затирает — оно добавляет, — так что спорить тут не о чем в принципе. Два
+     * автора, добавившие по уровню, получают два уровня; отказ не спасал ничего,
+     * а работу ломал.
+     */
+    public function testTwoDevicesMayBothAddALevelWithoutKnowingOfEachOther(): void
     {
         $version = $this->createStory();
         $this->addLevel('lvl-1', $this->chapterId, $version);
 
-        // The other device still believes it is on the earlier version.
+        // Телефон всё ещё думает, что история такая, какой он её видел.
         $this->postJson("/api/stories/{$this->storyId}/levels", [
             'chapterId' => $this->chapterId,
             'name' => 'From the phone',
             'x' => 30,
             'y' => 50,
             'version' => $version,
-        ])->assertStatus(409);
+        ])->assertStatus(201);
+
+        $this->getJson("/api/stories/{$this->storyId}")->assertJsonCount(2, 'levels');
     }
 
     public function testDeletingALevelIsItsOwnWrite(): void

@@ -88,7 +88,6 @@ final readonly class StoryController
             "chapterOrder.*" => ["string", "max:64"],
             "startNodeId" => ["nullable", "string", "max:64"],
             "intro" => ["nullable", "string", "max:2000"],
-            "version" => ["required", "integer", "min:0"],
         ]);
 
         $story = ($this->update)(new UpdateStory(
@@ -98,7 +97,6 @@ final readonly class StoryController
             $data["cover"] ?? null,
             $data["hot"] ?? null,
             $data["chapterOrder"] ?? null,
-            (int) $data["version"],
             $data["startNodeId"] ?? null,
             $data["intro"] ?? null,
         ));

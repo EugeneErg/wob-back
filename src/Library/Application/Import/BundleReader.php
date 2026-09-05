@@ -363,7 +363,7 @@ final readonly class BundleReader
                 }
             }
 
-            $stories[] = new Story(
+            $story = new Story(
                 new StoryId($this->ids->reserveStory($old)),
                 $this->owner,
                 $this->required($item, 'title', 'story'),
@@ -372,6 +372,15 @@ final readonly class BundleReader
                 $this->levelsUsedBy($own, $levels),
                 $this->assetIds($item->hot ?? []),
             );
+
+            // Файл приходит снаружи и не обязан быть делом рук редактора. Оба
+            // правила о маршрутах — не про опрятность: кольцо запирает само
+            // себя, а возврат в покинутую главу ломает счёт пройденного. Ни то,
+            // ни другое потом не видно — история сохранится и нарисуется, — так
+            // что спрашивать надо здесь, на входе.
+            $story->assertRoutesAreSound();
+
+            $stories[] = $story;
         }
 
         // A chapter nobody claimed. This used to get a shelter story named

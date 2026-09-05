@@ -12,7 +12,6 @@ final readonly class CreateChapter
         public string $chapterId,
         public string $title,
         public string $image,
-        public int $expectedVersion,
     ) {
     }
 }

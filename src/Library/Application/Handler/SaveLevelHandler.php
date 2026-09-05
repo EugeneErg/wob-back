@@ -25,7 +25,6 @@ final readonly class SaveLevelHandler
     {
         $owner = new OwnerId($command->ownerId);
         $story = $this->stories->get($owner, new StoryId($command->storyId));
-        $story->expectVersion($command->expectedVersion);
 
         $level = $story->level(new LevelId($command->levelId));
         $level->rename($command->name);

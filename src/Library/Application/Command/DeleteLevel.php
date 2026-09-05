@@ -11,7 +11,6 @@ final readonly class DeleteLevel
         public string $storyId,
         public string $chapterId,
         public string $levelId,
-        public int $expectedVersion,
     ) {
     }
 }

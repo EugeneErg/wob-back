@@ -67,6 +67,27 @@ final readonly class ForkController
         return new JsonResponse(['forkStoryId' => $fork->value], 201);
     }
 
+    /**
+     * Взять чужую историю себе, ничего пока не меняя.
+     *
+     * Форк рождается на первой правке — это верно и для чужого содержимого, и
+     * для места на полке. Но взять историю и открыть её редактор — само по себе
+     * решение, и до него у человека не было ни одной кнопки: маршрутов к этому
+     * контроллеру не существовало вовсе, хотя методы написаны.
+     */
+    public function fork(Request $request, string $releaseId): JsonResponse
+    {
+        $fork = ($this->edit)(new EditForeignStory(
+            (string) $request->attributes->get('ownerId'),
+            $releaseId,
+            'level',
+            '',
+            null,
+        ));
+
+        return new JsonResponse(['forkStoryId' => $fork->value], 201);
+    }
+
     public function propose(Request $request, string $forkStoryId): JsonResponse
     {
         $data = $request->validate(['title' => ['required', 'string', 'max:200']]);

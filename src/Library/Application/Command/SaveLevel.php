@@ -34,7 +34,6 @@ final readonly class SaveLevel
         public int $goal,
         public array $entities,
         public array $hot,
-        public int $expectedVersion,
         public ?string $image = null,
     ) {
     }

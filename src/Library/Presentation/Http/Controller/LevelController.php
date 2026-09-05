@@ -38,7 +38,6 @@ final readonly class LevelController
             "name" => ["required", "string", "max:200"],
             "x" => ["nullable", "numeric", "between:0,100"],
             "y" => ["nullable", "numeric", "between:0,100"],
-            "version" => ["required", "integer", "min:0"],
         ]);
 
         // И уровень, и точка на карте получают имена здесь: клиент их не
@@ -54,11 +53,47 @@ final readonly class LevelController
             $data["name"],
             (float) ($data["x"] ?? 50),
             (float) ($data["y"] ?? 50),
-            (int) $data["version"],
             $nodeId,
         ));
 
         return new JsonResponse(["id" => $levelId, "nodeId" => $nodeId, "version" => $story->version()], 201);
+    }
+
+    /**
+     * Поставить на карту ещё одну точку для уровня, который уже есть.
+     *
+     * Метода не было вовсе: маршрут ссылался на LevelController::pin, команда и
+     * обработчик были написаны, а звена между ними никто не дописал. Любой
+     * бросок уровня на карту отвечал пятисоткой.
+     *
+     * PinLevelHandler всё это время был объявлен в конструкторе и не
+     * использован — верный признак работы, брошенной на середине. Тесты этого
+     * не поймали, потому что звали обработчик напрямую, минуя маршрут.
+     */
+    public function pin(Request $request, string $storyId): JsonResponse
+    {
+        $data = $request->validate([
+            "chapterId" => ["required", "string", "max:64"],
+            "levelId" => ["required", "string", "max:64"],
+            "x" => ["nullable", "numeric", "between:0,100"],
+            "y" => ["nullable", "numeric", "between:0,100"],
+        ]);
+
+        // Имя точки выдаёт сервер, как и всем прочим: клиент не знает, что уже
+        // занято.
+        $nodeId = $this->ids->next("nd");
+
+        $story = ($this->pin)(new PinLevel(
+            $this->owner($request),
+            $storyId,
+            $data["chapterId"],
+            $data["levelId"],
+            $nodeId,
+            (float) ($data["x"] ?? 50),
+            (float) ($data["y"] ?? 50),
+        ));
+
+        return new JsonResponse(["nodeId" => $nodeId, "version" => $story->version()], 201);
     }
 
     public function save(Request $request, string $storyId, string $levelId): JsonResponse
@@ -74,7 +109,6 @@ final readonly class LevelController
             "hot" => ["present", "array"],
             "hot.*" => ["string", "max:64"],
             "image" => ["nullable", "string", "max:2000"],
-            "version" => ["required", "integer", "min:0"],
         ]);
 
         // Entities are re-read from the raw body rather than taken from the
@@ -96,7 +130,6 @@ final readonly class LevelController
             (int) $data["goal"],
             $entities,
             $data["hot"],
-            (int) $data["version"],
             $data["image"] ?? null,
         ));
 
@@ -105,14 +138,11 @@ final readonly class LevelController
 
     public function destroy(Request $request, string $storyId, string $chapterId, string $levelId): JsonResponse
     {
-        $data = $request->validate(["version" => ["required", "integer", "min:0"]]);
-
         $story = ($this->delete)(new DeleteLevel(
             $this->owner($request),
             $storyId,
             $chapterId,
             $levelId,
-            (int) $data["version"],
         ));
 
         return new JsonResponse(["version" => $story->version()]);

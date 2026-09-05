@@ -22,7 +22,6 @@ final readonly class SaveChapterMap
         public ?string $title,
         public ?string $image,
         public array $nodes,
-        public int $expectedVersion,
         public ?string $map = null,
 
         /** @var array{x: float, y: float, w: float, h: float}|null */

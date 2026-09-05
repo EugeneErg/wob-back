@@ -271,11 +271,105 @@ final class Story extends AggregateRoot
 
         try {
             $this->assertReferencesResolve();
+            $this->assertNoCycles();
+            $this->assertChaptersAreNotRevisited();
         } catch (InvariantViolation $e) {
             $chapter->replaceMap($before);
 
             throw $e;
         }
+    }
+
+    /**
+     * Точка переехала.
+     *
+     * Одна из мелких операций, которыми теперь правится черновик. Раньше на её
+     * месте уезжала вся карта главы разом, и потому любые две правки в одной
+     * главе спорили между собой — даже если двигали разные точки. Спор разнимали
+     * номером версии, а номер приходилось угадывать клиенту: отсюда и конфликты
+     * на создании уровня, которое ни с чем конфликтовать не может.
+     *
+     * Проверять маршруты здесь незачем: переезд точки не меняет ни одной связи.
+     */
+    public function moveNode(ChapterId $chapterId, NodeId $nodeId, float $x, float $y): void
+    {
+        $chapter = $this->chapter($chapterId);
+        $node = $chapter->node($nodeId) ?? throw InvariantViolation::because(
+            sprintf("Chapter %s has no point %s", $chapterId->value, $nodeId->value),
+        );
+
+        $chapter->replaceNode($node->movedTo($x, $y));
+    }
+
+    /** Что игрок видит в этом месте: имя, картинка, ролик после победы. */
+    public function describeNode(
+        ChapterId $chapterId,
+        NodeId $nodeId,
+        string $name,
+        string $image,
+        string $outro,
+    ): void {
+        $chapter = $this->chapter($chapterId);
+        $node = $chapter->node($nodeId) ?? throw InvariantViolation::because(
+            sprintf("Chapter %s has no point %s", $chapterId->value, $nodeId->value),
+        );
+
+        $chapter->replaceNode($node->describedAs($name, $image, $outro));
+    }
+
+    /**
+     * Провести связь.
+     *
+     * Здесь маршруты проверяются обязательно: связь — единственное, что может
+     * замкнуть историю в кольцо или вернуть путь в покинутую главу. Зато
+     * проверка теперь стоит там, где нарушение и рождается, а не на сохранении
+     * всей карты, где о причине приходилось догадываться.
+     */
+    public function linkNodes(NodeId $from, NodeId $to): void
+    {
+        $chapterId = $this->chapterOf($from) ?? throw InvariantViolation::because(
+            sprintf("Story %s has no point %s", $this->id->value, $from->value),
+        );
+
+        if ($this->chapterOf($to) === null) {
+            throw InvariantViolation::because(
+                sprintf("Story %s has no point %s", $this->id->value, $to->value),
+            );
+        }
+
+        $chapter = $this->chapter($chapterId);
+        $node = $chapter->node($from);
+        $before = $node;
+
+        $chapter->replaceNode($node->leadingTo($to));
+
+        try {
+            $this->assertRoutesAreSound();
+        } catch (InvariantViolation $e) {
+            $chapter->replaceNode($before);
+
+            throw $e;
+        }
+    }
+
+    /** Снять связь. Снять можно всегда: убирая дорогу, кольца не создашь. */
+    public function unlinkNodes(NodeId $from, NodeId $to): void
+    {
+        $chapterId = $this->chapterOf($from) ?? throw InvariantViolation::because(
+            sprintf("Story %s has no point %s", $this->id->value, $from->value),
+        );
+
+        $chapter = $this->chapter($chapterId);
+        $chapter->replaceNode($chapter->node($from)->notLeadingTo($to));
+    }
+
+    /** Как выглядит глава: название и фон, на котором стоят точки. */
+    public function describeChapter(ChapterId $chapterId, string $title, string $image, string $map = ""): void
+    {
+        $chapter = $this->chapter($chapterId);
+        $chapter->rename($title);
+        $chapter->setImage($image);
+        $chapter->setMap($map);
     }
 
     public function addChapter(Chapter $chapter): void
@@ -295,6 +389,8 @@ final class Story extends AggregateRoot
         $this->startNodeId ??= $this->firstNodeId();
 
         $this->assertReferencesResolve();
+        $this->assertNoCycles();
+        $this->assertChaptersAreNotRevisited();
     }
 
     /**
@@ -434,6 +530,86 @@ final class Story extends AggregateRoot
         )));
     }
 
+    /**
+     * Проверить маршруты истории целиком.
+     *
+     * Существует ради тех, кто собирает историю не по одной правке, а сразу
+     * готовой, — прежде всего ради импорта файла. Правки из редактора идут
+     * через addChapter() и replaceChapterMap(), и там проверка стоит сама;
+     * файл же приходит снаружи и минует их оба.
+     *
+     * Отдельным методом, а не в конструкторе, и это осознанно. Конструктор —
+     * ещё и путь чтения из базы: заставь его проверять, и история, у которой
+     * маршруты уже сломаны, перестанет открываться вовсе, то есть станет
+     * непочинимой. Так что проверяют те, кто принимает содержимое снаружи, а
+     * не те, кто достаёт своё.
+     */
+    public function assertRoutesAreSound(): void
+    {
+        $this->assertNoCycles();
+        $this->assertChaptersAreNotRevisited();
+        $this->assertNoLevelRepeatsOnAPath();
+    }
+
+    /**
+     * Один уровень не встречается дважды на одном пути.
+     *
+     * Точка показывает уровень, а не заводит его, поэтому один уровень законно
+     * стоит в нескольких местах истории — но в разных ветвях, а не подряд на
+     * одной дороге. Пройти его дважды за одно прохождение значит переиграть уже
+     * сыгранное: счёт пройденного собьётся, а игрок решит, что заблудился.
+     *
+     * Проверяется по пути, как и возврат в главу: смотрим, можно ли из точки
+     * дойти до другой точки того же уровня. Если можно — значит есть
+     * прохождение, где он встретится дважды.
+     */
+    private function assertNoLevelRepeatsOnAPath(): void
+    {
+        /** @var array<string, string> $levelOf */
+        $levelOf = [];
+        /** @var array<string, list<string>> $edges */
+        $edges = [];
+
+        foreach ($this->chapters as $chapter) {
+            foreach ($chapter->nodes() as $node) {
+                $levelOf[$node->id->value] = $node->levelId->value;
+                $edges[$node->id->value] = array_map(
+                    static fn (NodeId $child): string => $child->value,
+                    $node->next,
+                );
+            }
+        }
+
+        foreach ($edges as $start => $_) {
+            $level = $levelOf[$start];
+            $seen = [$start => true];
+            $stack = $edges[$start];
+
+            while ($stack !== []) {
+                $at = array_pop($stack);
+
+                if (isset($seen[$at])) {
+                    continue;
+                }
+
+                $seen[$at] = true;
+
+                if (($levelOf[$at] ?? null) === $level) {
+                    throw InvariantViolation::because(sprintf(
+                        "Level %s is met twice on one path, at points %s and %s",
+                        $level,
+                        $start,
+                        $at,
+                    ));
+                }
+
+                foreach ($edges[$at] ?? [] as $next) {
+                    $stack[] = $next;
+                }
+            }
+        }
+    }
+
     // ---- versioning ---------------------------------------------------------
 
     /**
@@ -441,6 +617,24 @@ final class Story extends AggregateRoot
      * the same story; last-write-wins would silently eat an afternoon of level
      * design. The client sends the version it loaded, and a stale write is
      * refused rather than applied.
+     */
+    /**
+     * Сверка версии черновика. Больше не вызывается ниоткуда.
+     *
+     * Осталась как след решения, которое оказалось неверным, и как объяснение,
+     * почему его сняли. Версия черновика росла на каждой записи, и клиент был
+     * обязан носить её с собой и угадывать текущую. Защищала она от одного:
+     * двух рук, сохраняющих карту главы целиком. Но карта целиком — сама по
+     * себе неверная единица записи, а раз её не стало, то и защищать нечего:
+     * мелкие операции над разными точками не спорят, а над одной сходятся к
+     * последней.
+     *
+     * Ценой были отказы там, где спора быть не может в принципе. Создание
+     * уровня ничего не затирает, оно добавляет, — и всё равно получало 409,
+     * стоило очереди сдвинуть номер между чтением и отправкой.
+     *
+     * Номер, который что-то значит для автора, остался ровно один — номер
+     * релиза.
      */
     public function expectVersion(int $expected): void
     {
@@ -525,6 +719,158 @@ final class Story extends AggregateRoot
         }
 
         return false;
+    }
+
+    /**
+     * Связи не должны замыкаться в кольцо.
+     *
+     * Это не про опрятность графа, а про то, что кольцо запирает само себя.
+     * Точка открывается, когда пройден хоть один из ведущих в неё родителей; у
+     * каждой точки кольца родитель есть, и ни один из них не пройден и не
+     * может быть пройден. Значит всё кольцо и всё, что растёт за ним,
+     * недостижимо навсегда — при том, что история сохраняется, отдаётся и
+     * рисуется как ни в чём не бывало.
+     *
+     * Проверяется по всей истории, а не внутри главы: связь свободно уходит на
+     * соседнюю карту, и кольцо складывается из двух глав, в каждой из которых
+     * по отдельности всё честно. Ровно поэтому проверка живёт здесь, а не в
+     * Chapter — глава своих связей целиком не видит.
+     *
+     * Обход итеративный. Рекурсия читалась бы короче и упиралась бы в глубину
+     * стека на длинной истории, а длинная история — обычный случай, а не
+     * крайний.
+     *
+     * Клиент спрашивает о том же перед тем, как провести линию, и это не
+     * дублирование: там вопрос задаётся, чтобы не дать нарисовать заведомо
+     * мёртвую связь, здесь — чтобы её нельзя было записать в обход интерфейса.
+     */
+    private function assertNoCycles(): void
+    {
+        /** @var array<string, list<string>> $edges */
+        $edges = [];
+
+        foreach ($this->chapters as $chapter) {
+            foreach ($chapter->nodes() as $node) {
+                $edges[$node->id->value] = array_map(
+                    static fn (NodeId $child): string => $child->value,
+                    $node->next,
+                );
+            }
+        }
+
+        // 1 — точка лежит на текущем пути, 2 — точка и всё за ней уже проверены.
+        $state = [];
+
+        foreach (array_keys($edges) as $root) {
+            if (isset($state[$root])) {
+                continue;
+            }
+
+            $state[$root] = 1;
+            $stack = [[$root, 0]];
+
+            while ($stack !== []) {
+                [$at, $i] = array_pop($stack);
+                $children = $edges[$at] ?? [];
+
+                if (!isset($children[$i])) {
+                    $state[$at] = 2;
+
+                    continue;
+                }
+
+                $stack[] = [$at, $i + 1];
+                $child = $children[$i];
+
+                if (($state[$child] ?? 0) === 1) {
+                    throw InvariantViolation::because(sprintf(
+                        "Point %s leads back to %s, so the story would close into a loop",
+                        $at,
+                        $child,
+                    ));
+                }
+
+                if (!isset($state[$child])) {
+                    $state[$child] = 1;
+                    $stack[] = [$child, 0];
+                }
+            }
+        }
+    }
+
+    /**
+     * Выйдя из главы, путь не возвращается в неё.
+     *
+     * Внутри главы ходить можно как угодно: несколько точек подряд, развилки,
+     * слияния. Запрещено ровно «вышел и вернулся» — ch1 → ch2 → ch1. Глава в
+     * таком пути перестаёт быть его отрезком и становится двумя разными местами
+     * под одним именем, а весь учёт хода игры ведётся по главам: какая открыта,
+     * какая пройдена, какая следующая. Глава, пройденная наполовину, потом
+     * покинутая, потом открытая заново, делает бессмысленным каждый из этих
+     * трёх ответов — и делает это молча, потому что сохраняется и рисуется она
+     * при этом безупречно.
+     *
+     * Проверяется по пути, а не по «графу глав». Кольцо в графе глав можно
+     * получить рёбрами из кусков главы, между которыми нет ни одного настоящего
+     * пути; запрещать такое значило бы отвергать связи, по которым никто никогда
+     * не пройдёт. Здесь вопрос ставится ровно так, как он звучит: выйдя вот этой
+     * связью, можно ли добрести обратно.
+     *
+     * Опирается на ацикличность, проверенную выше: без неё обход был бы
+     * бесконечным. Порядок вызовов поэтому не случаен.
+     */
+    private function assertChaptersAreNotRevisited(): void
+    {
+        /** @var array<string, string> $chapterOf */
+        $chapterOf = [];
+        /** @var array<string, list<string>> $edges */
+        $edges = [];
+
+        foreach ($this->chapters as $chapter) {
+            foreach ($chapter->nodes() as $node) {
+                $chapterOf[$node->id->value] = $chapter->id->value;
+                $edges[$node->id->value] = array_map(
+                    static fn (NodeId $child): string => $child->value,
+                    $node->next,
+                );
+            }
+        }
+
+        foreach ($edges as $from => $children) {
+            $home = $chapterOf[$from];
+
+            foreach ($children as $child) {
+                // Связь внутри главы никуда не выводит, значит и возвращать ей
+                // неоткуда.
+                if (($chapterOf[$child] ?? $home) === $home) {
+                    continue;
+                }
+
+                $seen = [$child => true];
+                $stack = [$child];
+
+                while ($stack !== []) {
+                    $at = array_pop($stack);
+
+                    if ($chapterOf[$at] === $home) {
+                        throw InvariantViolation::because(sprintf(
+                            "Point %s leaves chapter %s, and the road on from it comes back into that chapter",
+                            $from,
+                            $home,
+                        ));
+                    }
+
+                    foreach ($edges[$at] ?? [] as $next) {
+                        if (isset($seen[$next])) {
+                            continue;
+                        }
+
+                        $seen[$next] = true;
+                        $stack[] = $next;
+                    }
+                }
+            }
+        }
     }
 
     private function assertReferencesResolve(): void

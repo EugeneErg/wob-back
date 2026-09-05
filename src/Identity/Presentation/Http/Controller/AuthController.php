@@ -7,6 +7,8 @@ namespace Wob\Identity\Presentation\Http\Controller;
 use Illuminate\Contracts\Auth\StatefulGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Wob\Identity\Application\Command\SignInWithGoogle;
 use Wob\Identity\Application\Handler\SignInWithGoogleHandler;
@@ -47,6 +49,54 @@ final readonly class AuthController
         $this->guard()->loginUsingId($user->id->value);
 
         return new JsonResponse(["user" => $this->present($user)]);
+    }
+
+    /**
+     * Вход без Google — только для разработки.
+     *
+     * Существует потому, что иначе локально нельзя пройти ни одного шага:
+     * настоящий вход требует обращения к серверам Google, а без него весь
+     * редактор недоступен, и проверить работу можно лишь тестами.
+     *
+     * Заперт двумя замками сразу, и это не перестраховка. Один флаг легко
+     * включить в проде по недосмотру, а цена такой ошибки — вход в любой
+     * аккаунт по имени почты. Поэтому нужны и окружение local, и явно
+     * поставленный WOB_DEV_LOGIN: ни то ни другое по отдельности не открывает.
+     */
+    public function dev(Request $request): JsonResponse
+    {
+        abort_unless(
+            app()->environment("local") && config("auth.dev_login"),
+            404,
+        );
+
+        $email = (string) $request->input("email", "author@wob.local");
+        $row = DB::table("users")->where("email", $email)->first();
+
+        if ($row === null) {
+            $id = (string) Str::uuid();
+
+            DB::table("users")->insert([
+                "id" => $id,
+                "google_sub" => "dev-" . $email,
+                "email" => $email,
+                "display_name" => "Dev " . strtok($email, "@"),
+                "created_at" => now(),
+                "updated_at" => now(),
+            ]);
+        } else {
+            $id = (string) $row->id;
+        }
+
+        $request->session()->regenerate();
+        $this->guard()->loginUsingId($id);
+
+        return new JsonResponse(["user" => [
+            "id" => $id,
+            "email" => $email,
+            "name" => "Dev " . strtok($email, "@"),
+            "avatar" => null,
+        ]]);
     }
 
     public function me(Request $request): JsonResponse

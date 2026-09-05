@@ -133,13 +133,15 @@ final class AuthoringFlowTest extends TestCase
             ->assertJsonPath('id', $this->levelId);
     }
 
-    public function testAStaleWriteIsRefusedInsteadOfOverwriting(): void
+    public function testALateWriteFromAnotherTabStillLands(): void
     {
         $this->signIn();
         $this->createStoryWithLevel();
 
-        // Version 2 was consumed by creating the level; a second device still
-        // believes it is on 1.
+        // Вторая вкладка отстала и об этом не знает. Правка всё равно ложится:
+        // две руки, правящие один уровень, сходятся к последней — так же, как
+        // это делает любая доска с одновременным редактированием. Отказ на этом
+        // месте отменял работу человека, ничего взамен не спасая.
         $this->putJson("/api/stories/{$this->storyId}/levels/{$this->levelId}", [
             'name' => 'Renamed by the other tab',
             'width' => 1600,
@@ -149,9 +151,10 @@ final class AuthoringFlowTest extends TestCase
             'entities' => [],
             'hot' => [],
             'version' => 1,
-        ])->assertStatus(409)->assertJsonPath('error.code', 'conflict');
+        ])->assertOk();
 
-        $this->getJson("/api/stories/{$this->storyId}")->assertJsonPath('levels.0.name', 'Tower');
+        $this->getJson("/api/stories/{$this->storyId}")
+            ->assertJsonPath('levels.0.name', 'Renamed by the other tab');
     }
 
     public function testOneAuthorCannotTouchAnotherStory(): void

@@ -26,7 +26,6 @@ final readonly class UpdateStoryHandler
     {
         $owner = new OwnerId($command->ownerId);
         $story = $this->stories->get($owner, new StoryId($command->storyId));
-        $story->expectVersion($command->expectedVersion);
 
         if ($command->title !== null) {
             $story->rename($command->title);

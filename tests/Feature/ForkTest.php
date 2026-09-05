@@ -299,4 +299,56 @@ final class ForkTest extends TestCase
             $levels,
         ));
     }
+
+    /**
+     * Форкнуть можно любую историю, включая канон, и до правки тоже.
+     *
+     * Маршрута к этому не существовало: контроллер и обработчики были написаны,
+     * а двери наружу не было — тот же случай, что с POST /points. Проверяется
+     * поэтому именно запрос, а не обработчик.
+     */
+    public function testAnyReleaseCanBeForkedThroughTheRoute(): void
+    {
+        $releaseId = $this->release->id->value;
+
+        $fork = $this->postJson("/api/releases/{$releaseId}/fork")
+            ->assertStatus(201)->json('forkStoryId');
+
+        self::assertNotEmpty($fork);
+
+        // Повторный форк той же версии тем же человеком не плодит вторую копию:
+        // это то же самое решение, принятое дважды.
+        $again = $this->postJson("/api/releases/{$releaseId}/fork")
+            ->assertStatus(201)->json('forkStoryId');
+
+        self::assertSame($fork, $again);
+    }
+
+    /**
+     * Свежий форк выглядит как оригинал, хотя своего содержимого у него нет.
+     *
+     * Копирование ленивое — главы и уровни появляются у копии по мере правок, —
+     * но это про хранение, а не про то, что видит человек. Взяв историю себе и
+     * открыв редактор, он видел пустоту: чтение библиотеки автора не спрашивало
+     * базовый релиз, хотя выдача игрокам спрашивала.
+     */
+    public function testAFreshForkShowsTheOriginalContent(): void
+    {
+        $forkId = $this->postJson("/api/releases/{$this->release->id->value}/fork")
+            ->assertStatus(201)->json('forkStoryId');
+
+        // Своего в базе действительно ничего нет: ни одной наложенной правки.
+        self::assertSame(0, DB::table('fork_overrides')->count());
+
+        $mine = $this->getJson("/api/stories/{$forkId}")->assertOk()->json();
+        $original = $this->release->content;
+
+        self::assertCount(count($original->chapters), $mine['chapters'], 'главы должны быть видны');
+        self::assertCount(count($original->levels), $mine['levels'], 'уровни должны быть видны');
+
+        // И на полке она не выглядит пустой.
+        $shelf = collect($this->getJson('/api/library')->json('stories'))->firstWhere('id', $forkId);
+
+        self::assertNotEmpty($shelf, 'копия должна быть на полке');
+    }
 }

@@ -70,6 +70,13 @@ final readonly class EditForeignStoryHandler
 
             $fork = $session->forkStoryId();
 
+            // Пустой publicId значит «просто сделай форк»: человек взял чужую
+            // историю к себе и ещё ничего не менял. Форк при этом уже нужен —
+            // ему есть куда открыть редактор, — а накладывать поверх нечего.
+            if ($command->publicId === '') {
+                return $fork;
+            }
+
             // Only what was touched. The kind decides what a change means:
             // rewriting a level's contents copies the level; moving nodes
             // around a map copies the chapter, and nothing else moves with it.

@@ -22,7 +22,6 @@ final readonly class CreateChapterHandler
     {
         $owner = new OwnerId($command->ownerId);
         $story = $this->stories->get($owner, new StoryId($command->storyId));
-        $story->expectVersion($command->expectedVersion);
         $story->addChapter(new Chapter(new ChapterId($command->chapterId), $command->title, $command->image));
         $this->stories->save($story);
 

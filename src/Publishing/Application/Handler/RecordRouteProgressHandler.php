@@ -10,6 +10,7 @@ use Wob\Publishing\Domain\Repository\ReleaseRepository;
 use Wob\Publishing\Domain\Repository\SaveSlotRepository;
 use Wob\Achievements\Application\Handler\GrantAwards;
 use Wob\Publishing\Domain\Service\RouteProgress;
+use Wob\Publishing\Domain\ValueObject\ContentSnapshot;
 use Wob\Shared\Domain\Clock;
 
 /**
@@ -65,13 +66,41 @@ final readonly class RecordRouteProgressHandler
             return;
         }
 
-        $completion = $this->route->of($release->content, $this->slots->completedLevelIds($slotId));
+        $finished = $this->slots->completedLevelIds($slotId);
+        $completion = $this->route->of($release->content, $finished);
         $this->completions->record($releaseId, $playerId, $completion);
 
-        $this->clearForAuthor($release, $playerId, $completion->countsTowardsQuorum());
+        $this->clearForAuthor($release, $playerId, $this->clearedEverything($release->content, $finished));
 
         $this->awards->afterLevelFinished($playerId);
         $this->awards->afterRouteProgress($playerId, $releaseId->value, $release->storyId->value);
+    }
+
+    /**
+     * Прошёл ли автор в этом релизе каждый уровень.
+     *
+     * Не то же, что кворум канона, и намеренно строже. Кворум спрашивает про
+     * «свой маршрут»: прошедший одну ветвь до конца прошёл весь свой путь, и
+     * это правильный вопрос к игроку, который выбрал дорогу. К автору вопрос
+     * другой — он отвечает за всю историю целиком, включая ветви, по которым
+     * сам не пошёл бы. Отпусти релиз по маршруту, и половина развилок уехала бы
+     * к людям непроверенной.
+     *
+     * Считается по уровням на картах, а не по всем уровням снимка: см.
+     * playableLevelIds().
+     *
+     * @param list<string> $finishedLevelIds
+     */
+    private function clearedEverything(ContentSnapshot $content, array $finishedLevelIds): bool
+    {
+        $playable = $content->playableLevelIds();
+
+        // История, в которой играть нечего, не «пройдена целиком» — она пуста.
+        if ($playable === []) {
+            return false;
+        }
+
+        return array_diff($playable, $finishedLevelIds) === [];
     }
 
     /**

@@ -10,7 +10,6 @@ final readonly class DeleteChapter
         public string $ownerId,
         public string $storyId,
         public string $chapterId,
-        public int $expectedVersion,
     ) {
     }
 }

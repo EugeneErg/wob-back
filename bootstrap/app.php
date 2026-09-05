@@ -44,7 +44,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // it is what establishes the session the token would come from. It is
         // safe to exempt because it proves nothing about the caller's cookies —
         // it is authenticated by a Google credential the attacker cannot mint.
-        $middleware->validateCsrfTokens(except: ['api/auth/google']);
+        // Оба входа без токена: сессии у входящего ещё нет, а значит нет и
+        // токена, который можно было бы проверить. Вход для разработки закрыт
+        // не здесь, а окружением и флагом — см. AuthController::dev.
+        $middleware->validateCsrfTokens(except: ['api/auth/google', 'api/auth/dev']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Domain failures are answered in one place. Without this, a broken
