@@ -24,6 +24,20 @@ use Wob\Shared\Domain\Exception\InvariantViolation;
  * rather than an associative array on purpose: an empty JSON object and an
  * empty JSON array both decode to [] in PHP, and telling them apart is the
  * difference between a matching content hash and a broken one.
+ *
+ * A placement may name an asset instead of spelling everything out. Then data
+ * holds only what differs from it, and the two are read together: asset first,
+ * data over the top. That is not the same shortcut as leaving fields to engine
+ * defaults, which is forbidden elsewhere and for good reason — a default shifts
+ * when somebody edits the engine, silently and without the author's consent. An
+ * asset cannot shift at all: it is never edited and never deleted, only
+ * retired. Immutability is the whole reason the reference is safe, and it is
+ * what makes "asset plus differences" a complete description rather than a
+ * hopeful one.
+ *
+ * An asset may hold a group, so a placement referring to one also names which
+ * member it means; otherwise there is no telling what the differences differ
+ * from.
  */
 final readonly class EntityPlacement implements JsonSerializable
 {
@@ -32,12 +46,23 @@ final readonly class EntityPlacement implements JsonSerializable
         public string $type,
         public stdClass $data,
         public ?string $parent = null,
+        public ?string $asset = null,
+        public ?string $member = null,
     ) {
         if ($id === "" || mb_strlen($id) > 64) {
             throw InvariantViolation::because("Entity id must be 1-64 characters");
         }
         if (preg_match("/^[a-z0-9-]{1,64}$/", $type) !== 1) {
             throw InvariantViolation::because(sprintf("Entity type \"%s\" is not a valid type name", $type));
+        }
+        if ($asset !== null && ($asset === "" || mb_strlen($asset) > 64)) {
+            throw InvariantViolation::because("Asset id must be 1-64 characters");
+        }
+        if ($member !== null && $asset === null) {
+            throw InvariantViolation::because("A placement naming a group member must name the asset it belongs to");
+        }
+        if ($member !== null && ($member === "" || mb_strlen($member) > 64)) {
+            throw InvariantViolation::because("Asset member id must be 1-64 characters");
         }
     }
 
@@ -54,6 +79,8 @@ final readonly class EntityPlacement implements JsonSerializable
             (string) ($raw->type ?? ""),
             $data,
             isset($raw->parent) ? (string) $raw->parent : null,
+            isset($raw->asset) ? (string) $raw->asset : null,
+            isset($raw->member) ? (string) $raw->member : null,
         );
     }
 
@@ -66,6 +93,14 @@ final readonly class EntityPlacement implements JsonSerializable
 
         if ($this->parent !== null) {
             $out->parent = $this->parent;
+        }
+
+        if ($this->asset !== null) {
+            $out->asset = $this->asset;
+        }
+
+        if ($this->member !== null) {
+            $out->member = $this->member;
         }
 
         return $out;

@@ -63,8 +63,10 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
     // story, and shared across everything they make.
     Route::get("assets", [AssetController::class, "index"]);
     Route::post("assets", [AssetController::class, "store"]);
-    Route::patch("assets/{assetId}", [AssetController::class, "update"]);
-    Route::delete("assets/{assetId}", [AssetController::class, "destroy"]);
+    // Ни правки, ни удаления: уровень называет ассет, а не копирует его, и
+    // ссылка цела лишь пока названное не меняется. Улучшить ассет — значит
+    // выпустить новый; старый уходит из моды, но остаётся разрешимым.
+    Route::post("assets/{assetId}/retire", [AssetController::class, "retire"]);
 
     Route::get("library", [StoryController::class, "shelf"]);
 

@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+
+<strings>
+
+
+	<!-- 	This watermark should be an EMPTY STRING "" for release. In the meantime, we can use it to watermark
+		review copies we hand out, ie. "review copy for pc gamer" -->
+	<string id="LABEL_LABEL"
+			text=""/>
+
+			
+			
+  <!-- Chapter names and descriptions -->
+  <string id="CHAPTER1_NAME"
+          text="Глава 1"
+		  es="Capitulo 1"
+		  fr="Chapitre 1"
+		  de="Kapitel 1"
+		  it="Capitolo 1"
+		  />
+  <string id="CHAPTER1_DESCRIPTION"
+          text="&quot;Скользкие холмы&quot;"
+		  es="&quot;Colinas repletas de Goo&quot;"
+		  fr="&quot;Les Collines de Goo&quot;"
+		  de="&quot;Hugel voller Goo&quot;"
+		  it="&quot;Le colline piene di Goo&quot;"
+		  />
+  
+  <string id="CHAPTER2_NAME"
+          text="Глава 2"
+		  es="Capitulo 2"
+		  fr="Chapitre 2"
+		  de="Kapitel 2"
+		  it="Capitolo 2"
+		  />
+  <string id="CHAPTER2_DESCRIPTION"
+          text="&quot;Маленькая мисс мира тянучек&quot;"
+		  es="&quot;Pequena Miss World of Goo&quot;"
+		  fr="&quot;Miss World of Goo&quot;"
+		  de="&quot;Die Kleine Miss World des Goo&quot;"
+		  it="&quot;La piccola Miss World of Goo&quot;"/>
+
+  <string id="CHAPTER3_NAME"
+          text="Глава 3"
+		  es="Capitulo 3"
+		  fr="Chapitre 3"
+		  de="Kapitel 3"
+		  it="Capitolo 3"
+		  />
+  <string id="CHAPTER3_DESCRIPTION"
+          text="&quot;Шестеренка в машине&quot;"
+		  es="&quot;El engranaje&quot;"
+		  fr="&quot;Un Rouage de la machine&quot;"
+		  de="&quot;Ein Radchen in der Maschine&quot;"
+		  it="&quot;Incastro nella macchina&quot;"
+		  />
+
+  <string id="CHAPTER4_NAME"
+          text="Глава 4"
+		  es="Capitulo 4"
+		  fr="Chapitre 4"
+		  de="Kapitel 4"
+		  it="Capitolo 4"
+		  />
+  <string id="CHAPTER4_DESCRIPTION"
+          text="&quot;Информационная магистраль&quot;"
+		  es="&quot;Super-autopista de|la informacion&quot;"
+		  fr="&quot;Superautoroute de l'information&quot;"
+		  de="&quot;Daten-Autobahn&quot;"
+		  it="&quot;La superstrada informatica&quot;"
+		  />
+
+  <string id="CHAPTER5_NAME"
+          text="Эпилог"
+		  es="Epilogo"
+		  fr="Epilogue"
+		  de="Epilog"
+		  it="Epilogo"
+		  />
+  <string id="CHAPTER5_DESCRIPTION"
+          text="&quot;Конец света&quot;"
+		  es="&quot;El fin del mundo&quot;"
+		  fr="&quot;Fin du monde&quot;"
+		  de="&quot;Das Ende der Welt&quot;"
+		  it="&quot;La fine del mondo&quot;"
+		  />
+  
+  <string id="CHAPTER6_NAME"
+          text="Глава 0"
+		  es="Capitulo 0"
+		  fr="Chapitre 0"
+		  de="Kapitel 0"
+		  it="Capitolo 0"/>
+  <string id="CHAPTER6_DESCRIPTION"
+          text="&quot;Луна&quot;"
+		  es="&quot;&quot;"
+		  fr="&quot;&quot;"
+		  de="&quot;&quot;"
+		  it="&quot;&quot;"
+		  />
+
+		  
+		  
+  <!-- ==================================================
+    these are for the main menu display.
+    ============================================ -->
+  <string id="WOG_CORP_NAME"
+          text="Корпорация|Мир Тянучек"/>

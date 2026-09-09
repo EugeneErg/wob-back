@@ -51,4 +51,11 @@ final class LibraryServiceProvider extends ServiceProvider
             $c->make(\Wob\Publishing\Domain\Repository\ForkOverrideRepository::class),
         ));
     }
+
+    public function boot(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([\Wob\Library\Presentation\Console\ImportBundleCommand::class, \Wob\Library\Presentation\Console\ConvertWogCommand::class]);
+        }
+    }
 }

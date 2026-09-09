@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Wob\Library\Infrastructure\Persistence\Database;
 
+use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Ramsey\Uuid\Uuid;
 use Wob\Library\Domain\Model\Asset;
@@ -28,14 +29,35 @@ final readonly class DatabaseAssetRepository implements AssetRepository
         return $row === null ? null : $this->hydrate($row);
     }
 
-    public function ownedBy(OwnerId $ownerId): array
+    /**
+     * Anyone's asset, by id alone.
+     *
+     * Assets may be used by authors who do not own them, so resolving the
+     * reference a level makes cannot be scoped to the owner. find() stays
+     * owner-scoped because it guards writes; this one only reads.
+     */
+    public function byId(AssetId $id): ?Asset
     {
-        return $this->db->table("assets")
-            ->where("owner_id", $ownerId->value)
-            ->orderBy("created_at")
-            ->get()
-            ->map($this->hydrate(...))
-            ->all();
+        $row = $this->db->table("assets")->where("public_id", $id->value)->first();
+
+        return $row === null ? null : $this->hydrate($row);
+    }
+
+    /**
+     * The author's shelf.
+     *
+     * Retired assets are left out: they exist so that levels already built on
+     * them keep working, not so that anyone picks them again.
+     */
+    public function ownedBy(OwnerId $ownerId, bool $withRetired = false): array
+    {
+        $q = $this->db->table("assets")->where("owner_id", $ownerId->value);
+
+        if (!$withRetired) {
+            $q->whereNull("retired_at");
+        }
+
+        return $q->orderBy("created_at")->get()->map($this->hydrate(...))->all();
     }
 
     public function save(Asset $asset): void
@@ -45,25 +67,18 @@ final readonly class DatabaseAssetRepository implements AssetRepository
             "public_id" => $asset->id->value,
             "title" => $asset->title(),
             "entities" => json_encode($asset->entities(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            "retired_at" => $asset->retiredAt(),
             "updated_at" => now(),
         ];
 
+        // "entities" and "title" are in the update list only so that a repeated
+        // save of the same asset is harmless; nothing in the application edits
+        // them, and the route that used to has been removed.
         $this->db->table("assets")->upsert(
             [["id" => Uuid::uuid4()->toString(), ...$values, "created_at" => now()]],
             ["owner_id", "public_id"],
-            ["title", "entities", "updated_at"],
+            ["title", "entities", "retired_at", "updated_at"],
         );
-    }
-
-    public function remove(Asset $asset): void
-    {
-        // Hot lists elsewhere may still name this id, and that is fine: the
-        // client filters unknown ids out when building the palette. Chasing the
-        // references would turn one delete into a write across every story.
-        $this->db->table("assets")
-            ->where("owner_id", $asset->ownerId->value)
-            ->where("public_id", $asset->id->value)
-            ->delete();
     }
 
     private function hydrate(object $row): Asset
@@ -76,6 +91,7 @@ final readonly class DatabaseAssetRepository implements AssetRepository
                 EntityPlacement::fromObject(...),
                 json_decode($row->entities, false, 512, JSON_THROW_ON_ERROR),
             ),
+            $row->retired_at === null ? null : new DateTimeImmutable($row->retired_at),
         );
     }
 }

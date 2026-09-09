@@ -213,7 +213,7 @@ final readonly class BundleReader
                 new Dimensions((int) ($item->width ?? 1600), (int) ($item->height ?? 900)),
                 Gravity::fromArray((array) $gravity),
                 (int) ($item->goal ?? 0),
-                array_map(EntityPlacement::fromObject(...), $this->objects($item->entities ?? [])),
+                array_map($this->placement(...), $this->objects($item->entities ?? [])),
                 $this->assetIds($item->hot ?? []),
             );
         }
@@ -427,6 +427,38 @@ final readonly class BundleReader
     }
 
     /** @return list<AssetId> */
+    /**
+     * One placed entity, with its asset reference pointed at the right shelf.
+     *
+     * Assets are renamed on the way in — the file's own ids may collide with
+     * what the author already has — so an entity built on one has to follow.
+     * Leaving the reference as the file wrote it would import a level naming an
+     * asset that exists under a different name, and the check on the way out
+     * would refuse the whole bundle for it.
+     *
+     * A reference the file brought no asset for is left exactly as written, and
+     * that is deliberate: it may name an asset the author already owns, and
+     * pretending otherwise would silently detach a level from its ball types.
+     * If it names nothing at all, AssetReferences says so by name.
+     */
+    private function placement(stdClass $raw): EntityPlacement
+    {
+        $one = EntityPlacement::fromObject($raw);
+
+        if ($one->asset === null || !$this->ids->has($one->asset)) {
+            return $one;
+        }
+
+        return new EntityPlacement(
+            $one->id,
+            $one->type,
+            $one->data,
+            $one->parent,
+            $this->ids->resolve($one->asset),
+            $one->member,
+        );
+    }
+
     private function assetIds(mixed $raw): array
     {
         $ids = [];

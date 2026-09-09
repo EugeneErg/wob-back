@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Wob\Library\Presentation\Http\Controller;
 
 use Illuminate\Http\JsonResponse;
+use DateTimeImmutable;
 use Illuminate\Http\Request;
 use Wob\Library\Domain\Model\Asset;
 use Wob\Library\Domain\Repository\AssetRepository;
@@ -58,29 +59,31 @@ final readonly class AssetController
         return new JsonResponse($this->describe($asset), 201);
     }
 
-    public function update(Request $request, string $assetId): JsonResponse
+    /**
+     * Retire an asset: hide it from the palette, keep it resolvable.
+     *
+     * This replaces both editing and deleting, and it replaces them for the
+     * same reason. A level names the asset it uses rather than copying it, so
+     * the reference is only sound while the thing behind it holds still.
+     * Editing would silently rewrite every level ever built on it, including
+     * other authors' levels and released ones whose records are tied to their
+     * content hash. Deleting would break them outright, and there is no way to
+     * find out who was depending on it first.
+     *
+     * Improving an asset therefore means publishing a new one. The old one goes
+     * out of fashion instead: nobody can pick it again, everything already
+     * built on it keeps working.
+     */
+    public function retire(Request $request, string $assetId): JsonResponse
     {
         $owner = $this->owner($request);
         $asset = $this->assets->find(new AssetId($assetId), $owner) ?? throw NotFound::of('Asset', $assetId);
 
-        $data = $this->validated($request, []);
-
-        $asset->rename($data['title']);
-        $asset->replaceEntities($this->entities($data['entities']));
+        $asset->retire(new DateTimeImmutable());
 
         $this->assets->save($asset);
 
         return new JsonResponse($this->describe($asset));
-    }
-
-    public function destroy(Request $request, string $assetId): JsonResponse
-    {
-        $owner = $this->owner($request);
-        $asset = $this->assets->find(new AssetId($assetId), $owner) ?? throw NotFound::of('Asset', $assetId);
-
-        $this->assets->remove($asset);
-
-        return new JsonResponse(['id' => $assetId]);
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Wob\Library\Domain\Model;
 
+use DateTimeImmutable;
 use Wob\Library\Domain\ValueObject\AssetId;
 use Wob\Library\Domain\ValueObject\EntityPlacement;
 use Wob\Library\Domain\ValueObject\OwnerId;
@@ -45,9 +46,38 @@ final class Asset extends AggregateRoot
         public readonly OwnerId $ownerId,
         private string $title,
         private array $entities,
+        private ?DateTimeImmutable $retiredAt = null,
     ) {
         $this->rename($title);
         $this->replaceEntities($entities);
+    }
+
+    /**
+     * Out of fashion, not gone.
+     *
+     * A level names the asset it uses instead of copying it, and that reference
+     * is only safe because what it names cannot change. So there is no way to
+     * improve an asset in place: improving one means publishing a new one, and
+     * the old one is retired — hidden from the palette so nobody picks it
+     * again, still resolvable so everything already built on it keeps working.
+     *
+     * Deletion is not offered at all. Assets may be used by other authors, so
+     * there is no way to know who is depending on this one, and a missing asset
+     * is not a case to handle gracefully — it is a level that cannot be drawn.
+     */
+    public function retire(DateTimeImmutable $at): void
+    {
+        $this->retiredAt ??= $at;
+    }
+
+    public function retiredAt(): ?DateTimeImmutable
+    {
+        return $this->retiredAt;
+    }
+
+    public function isRetired(): bool
+    {
+        return $this->retiredAt !== null;
     }
 
     /**

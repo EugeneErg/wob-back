@@ -109,11 +109,24 @@ final class AssetShelfTest extends TestCase
         $this->signIn('stranger');
         self::assertCount(0, $this->getJson('/api/assets')->assertOk()->json('assets'));
 
-        // And a stranger cannot reach into it by guessing the id.
-        $this->deleteJson("/api/assets/{$mine}")->assertStatus(404);
+        // And a stranger cannot retire it by guessing the id.
+        $this->postJson("/api/assets/{$mine}/retire")->assertStatus(404);
     }
 
-    public function testAnAssetCanBeRenamedAndRearranged(): void
+    /**
+     * An asset cannot be edited or deleted, only retired.
+     *
+     * A level names the asset it uses rather than copying it, so the reference
+     * only holds while the thing behind it does. Editing would silently rewrite
+     * every level ever built on it — including other authors' levels, and
+     * released ones whose records are tied to their content hash. Deleting
+     * would break them outright, and there is no way to find out who was
+     * depending on it first.
+     *
+     * So improving an asset means publishing a new one, and the old one goes
+     * out of fashion: gone from the shelf, still there for whoever built on it.
+     */
+    public function testAnAssetIsRetiredRatherThanEditedOrDeleted(): void
     {
         $this->signIn('author');
         $made = $this->postJson('/api/assets', [
@@ -121,15 +134,107 @@ final class AssetShelfTest extends TestCase
             'entities' => [['id' => 'e-1', 'type' => 'terrain', 'data' => ['x' => 0]]],
         ])->assertStatus(201)->json('id');
 
-        $this->patchJson("/api/assets/{$made}", [
+        // Neither route exists any more: the API answers as it does for any
+        // path it has never heard of.
+        $this->patchJson("/api/assets/{$made}", ['title' => 'Second try', 'entities' => []])
+            ->assertStatus(404);
+        $this->deleteJson("/api/assets/{$made}")->assertStatus(404);
+
+        // Improving it means making another one; both stand side by side.
+        $this->postJson('/api/assets', [
             'title' => 'Second try',
             'entities' => [
                 ['id' => 'e-1', 'type' => 'terrain', 'data' => ['x' => 10]],
                 ['id' => 'e-2', 'type' => 'sand', 'data' => ['x' => 20]],
             ],
-        ])->assertOk()->assertJsonPath('title', 'Second try')->assertJsonPath('types', ['terrain', 'sand']);
+        ])->assertStatus(201);
 
-        self::assertCount(2, $this->getJson('/api/assets')->json('assets.0.entities'));
+        self::assertCount(2, $this->getJson('/api/assets')->assertOk()->json('assets'));
+
+        // Retiring the first takes it off the shelf and leaves the other.
+        $this->postJson("/api/assets/{$made}/retire")->assertOk();
+
+        $left = $this->getJson('/api/assets')->assertOk()->json('assets');
+        self::assertCount(1, $left);
+        self::assertSame('Second try', $left[0]['title']);
+
+        // Retiring twice is not an error: it is a state, not an event.
+        $this->postJson("/api/assets/{$made}/retire")->assertOk();
+    }
+
+    /**
+     * A level may name an asset instead of copying it, and must not name one
+     * that is not there.
+     *
+     * Naming rather than copying is what stops fifty-odd ball types from being
+     * duplicated into every ball that uses them. It is sound only because
+     * assets never change: resolve the name today or in a year and the level
+     * looks the same. What has to be caught is the name that resolves to
+     * nothing — not to draw something sensible instead, but because such a
+     * level cannot be drawn at all, and finding that out when a player opens it
+     * is far worse than refusing the save.
+     */
+    public function testALevelMayBuildOnAnAssetButNotOnAMissingOne(): void
+    {
+        $this->signIn('author');
+
+        $asset = $this->postJson('/api/assets', [
+            'title' => 'Common ball',
+            'entities' => [['id' => 'ball', 'type' => 'game-ball', 'data' => ['r' => 13, 'color' => '#e2704a']]],
+        ])->assertStatus(201)->json('id');
+
+        $story = $this->postJson('/api/stories', [
+            'title' => 'A story',
+            'cover' => '#000',
+            'chapter' => ['title' => 'Chapter one', 'image' => '#123'],
+        ])->assertStatus(201)->json();
+        $storyId = $story['id'];
+        $chapterId = $this->getJson("/api/stories/{$storyId}")->json('chapters.0.id');
+
+        $made = $this->postJson("/api/stories/{$storyId}/levels", [
+            'chapterId' => $chapterId,
+            'name' => 'A level',
+            'x' => 30,
+            'y' => 50,
+            'version' => $story['version'],
+        ])->assertStatus(201)->json();
+        $levelId = $made['id'];
+        $version = $made['version'];
+
+        $save = function (array $entities) use ($storyId, $levelId, &$version) {
+            return $this->putJson("/api/stories/{$storyId}/levels/{$levelId}", [
+                'name' => 'A level',
+                'width' => 1600,
+                'height' => 900,
+                'gravity' => ['x' => 0, 'y' => 1800],
+                'goal' => 1,
+                'entities' => $entities,
+                'hot' => [],
+                'version' => $version,
+            ]);
+        };
+
+        // Built on the asset, carrying only where it stands.
+        $save([[
+            'id' => 'b-1', 'type' => 'game-ball',
+            'asset' => $asset,
+            'data' => ['x' => 100, 'y' => 200],
+        ]])->assertOk();
+
+        $version = $this->getJson("/api/stories/{$storyId}")->json('version');
+
+        // And it comes back with the reference intact, not flattened.
+        $back = $this->getJson("/api/stories/{$storyId}")->assertOk()->json();
+        $placed = $back['levels'][0]['entities'][0];
+        self::assertSame($asset, $placed['asset']);
+        self::assertSame(['x' => 100, 'y' => 200], $placed['data']);
+
+        // A name that resolves to nothing is refused outright.
+        $save([[
+            'id' => 'b-2', 'type' => 'game-ball',
+            'asset' => 'no-such-asset',
+            'data' => ['x' => 0, 'y' => 0],
+        ]])->assertStatus(422);
     }
 
     public function testTheShelfNeedsASession(): void

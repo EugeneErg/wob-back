@@ -13,9 +13,10 @@ interface AssetRepository
     public function find(AssetId $id, OwnerId $ownerId): ?Asset;
 
     /** @return list<Asset> */
-    public function ownedBy(OwnerId $ownerId): array;
+    public function ownedBy(OwnerId $ownerId, bool $withRetired = false): array;
 
     public function save(Asset $asset): void;
 
-    public function remove(Asset $asset): void;
+    /** Anyone's asset, by id alone: levels may name assets they do not own. */
+    public function byId(AssetId $id): ?Asset;
 }

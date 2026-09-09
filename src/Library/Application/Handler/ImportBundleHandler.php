@@ -6,6 +6,7 @@ namespace Wob\Library\Application\Handler;
 
 use Illuminate\Database\ConnectionInterface;
 use Wob\Library\Application\Command\ImportBundle;
+use Wob\Library\Application\Import\AssetReferences;
 use Wob\Library\Application\DTO\ImportResult;
 use Wob\Library\Application\Import\BundleReader;
 use Wob\Library\Application\Import\IdMap;
@@ -49,6 +50,19 @@ final readonly class ImportBundleHandler
             // dependency direction obvious to anyone reading the log.
             foreach ($read['assets'] as $asset) {
                 $this->assets->save($asset);
+            }
+
+            // Assets are saved first on purpose, so a bundle may carry the
+            // ones its levels are built on and still check out. What it may not
+            // do is name an asset nobody has: that level could be stored, but
+            // never drawn, and the failure would surface long after the import
+            // reported success.
+            $check = new AssetReferences($this->assets);
+
+            foreach ($read['stories'] as $story) {
+                foreach ($story->levels() as $level) {
+                    $check->mustResolve($level->entities());
+                }
             }
 
             foreach ($read['stories'] as $story) {

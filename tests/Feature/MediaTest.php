@@ -121,6 +121,51 @@ final class MediaTest extends TestCase
             ->assertJsonPath('error.code', 'invalid');
     }
 
+    /**
+     * Sound uploads, and shows up on the shelf beside the pictures.
+     *
+     * It could not be uploaded at all while the only kinds were pictures and
+     * video, which is why a ball had no sound for any of its two dozen events
+     * and a level had no music. The shelf matters as much as the ceiling: one
+     * strand sound belongs to fifty balls, and re-uploading it fifty times is
+     * not an inconvenience, it is what makes the feature unusable.
+     */
+    public function testASoundUploadsAndJoinsTheShelf(): void
+    {
+        $this->signIn('author');
+
+        $made = $this->post('/api/media', ['file' => $this->oggFile('knock.ogg')])
+            ->assertStatus(201)->json();
+
+        self::assertSame('sound', $made['kind']);
+        self::assertSame('knock.ogg', $made['name']);
+
+        $this->post('/api/media', ['file' => $this->pngFile('body.png')])->assertStatus(201);
+
+        $shelf = $this->getJson('/api/media')->assertOk()->json('media');
+        $kinds = array_column($shelf, 'kind');
+        sort($kinds);
+
+        self::assertSame(['image', 'sound'], $kinds);
+    }
+
+    /**
+     * Sound shares the video ceiling rather than getting a number of its own.
+     *
+     * The same path carries a half-second knock and several minutes of music,
+     * and there is no one size right for both. The ceiling is there to stop a
+     * mistake, not to shape a decision: the largest file in the reference set
+     * is 1.33 MB, well under it.
+     */
+    public function testASoundOverTheCeilingIsRefused(): void
+    {
+        $this->signIn('author');
+
+        $this->post('/api/media', ['file' => $this->oggFile('epic.ogg', 61 * 1024 * 1024)])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'invalid');
+    }
+
     public function testUploadingNeedsASession(): void
     {
         $this->post('/api/media', ['file' => $this->pngFile('x.png')])
@@ -148,6 +193,28 @@ final class MediaTest extends TestCase
         fclose($handle);
 
         return new UploadedFile($path, $name, 'video/mp4', null, true);
+    }
+
+    /** An ogg that is only a header: sparse padding, so the size costs nothing. */
+    private function oggFile(string $name, int $bytes = 0): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'wob');
+        $handle = fopen($path, 'wb');
+        // A real Ogg page header followed by the Vorbis identification packet.
+        // It has to be genuine: the format is read from the bytes, not from
+        // what the upload claims, so a made-up header would be refused for its
+        // format and the size test would pass without reaching the size check.
+        fwrite($handle, "OggS\x00\x02" . str_repeat("\x00", 8) . "\x01\x00\x00\x00"
+            . str_repeat("\x00", 4) . "\x00\x00\x00\x00\x01\x1e\x01vorbis"
+            . "\x00\x00\x00\x00\x01\x44\xac\x00\x00" . str_repeat("\x00", 16));
+
+        if ($bytes > 0) {
+            ftruncate($handle, $bytes);
+        }
+
+        fclose($handle);
+
+        return new UploadedFile($path, $name, 'audio/ogg', null, true);
     }
 
     private function signIn(string $who): void
