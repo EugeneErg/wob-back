@@ -6,6 +6,7 @@ namespace Wob\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Wob\Tests\TestCase;
 
 /**
@@ -109,7 +110,93 @@ final class ImportCommandTest extends TestCase
         self::assertSame(0, DB::table('levels')->count());
     }
 
-    private function bundleFile(): string
+    /**
+     * The files the bundle refers to arrive with it, and it ends up pointing at
+     * them.
+     *
+     * This is the half that went missing when importing was split in two. A
+     * bundle without it still imports, still reports the right numbers and
+     * still looks correct in the database — every picture in it is simply a
+     * path into somebody else's folder, and nothing finds out until a player
+     * opens a level and sees a blank. So the check is not "did files upload"
+     * but "is the old path gone", which is the part that stayed true while
+     * being wrong.
+     */
+    public function testTheFilesABundleRefersToAreUploadedAndPointedAt(): void
+    {
+        Storage::fake('local');
+
+        $file = $this->bundleFile('images/motor.png');
+        $list = $this->mediaList(['motor' => 'images/motor.png']);
+
+        $this->artisan('wob:import', [
+            'file' => $file,
+            '--user' => 'a@example.test',
+            '--media' => $list,
+            '--media-root' => __DIR__ . '/../Fixtures/wog',
+        ])->expectsOutputToContain('files uploaded: 1')->assertSuccessful();
+
+        $media = DB::table('media')->first();
+        self::assertNotNull($media);
+        self::assertSame('image', $media->kind);
+        self::assertSame('motor.png', $media->original_name);
+
+        $entities = (string) DB::table('levels')->value('entities');
+        self::assertStringContainsString('/api/media/' . $media->id, $entities);
+        self::assertStringNotContainsString('images/motor.png', $entities);
+    }
+
+    /**
+     * A file that is not where the list says stops the import before anything
+     * is written.
+     *
+     * Checked all at once and up front, because the usual cause is not one
+     * missing picture but a --media-root pointing at the wrong folder — and
+     * finding that out halfway through leaves a library's worth of uploads on
+     * the disk and a message about a single path.
+     */
+    public function testAMissingFileStopsTheImportBeforeAnythingIsWritten(): void
+    {
+        Storage::fake('local');
+
+        $list = $this->mediaList(['gone' => 'images/not-here.png']);
+
+        $this->artisan('wob:import', [
+            'file' => $this->bundleFile('images/not-here.png'),
+            '--user' => 'a@example.test',
+            '--media' => $list,
+            '--media-root' => __DIR__ . '/../Fixtures/wog',
+        ])->assertFailed();
+
+        self::assertSame(0, DB::table('stories')->count());
+        self::assertSame(0, DB::table('media')->count());
+        self::assertSame(0, DB::table('users')->count());
+    }
+
+    /**
+     * The paths in a media list are relative, so the folder they are relative
+     * to is not optional.
+     */
+    public function testAMediaListWithoutARootIsRefused(): void
+    {
+        $this->artisan('wob:import', [
+            'file' => $this->bundleFile('images/motor.png'),
+            '--media' => $this->mediaList(['motor' => 'images/motor.png']),
+        ])->assertFailed();
+
+        self::assertSame(0, DB::table('stories')->count());
+    }
+
+    /** @param array<string, string> $named */
+    private function mediaList(array $named): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'wob') . '.json';
+        file_put_contents($path, json_encode($named));
+
+        return $path;
+    }
+
+    private function bundleFile(string $picture = ''): string
     {
         $bundle = [
             // Имена взяты из настоящего пакета, а не придуманы: я сперва
@@ -142,6 +229,9 @@ final class ImportCommandTest extends TestCase
                 'entities' => [[
                     'id' => 'b-1', 'type' => 'game-ball',
                     'asset' => 'ball-common', 'data' => ['x' => 100, 'y' => 200],
+                ], [
+                    'id' => 'pic-1', 'type' => 'picture',
+                    'data' => ['x' => 0, 'y' => 0, 'src' => $picture],
                 ]],
             ]],
         ];

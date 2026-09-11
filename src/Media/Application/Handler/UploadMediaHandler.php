@@ -52,7 +52,7 @@ final readonly class UploadMediaHandler
         // Written before the row exists. The other order can leave a row
         // pointing at bytes that never arrived, and a broken link in a story is
         // harder to notice than a file nobody references.
-        $path = $this->store->put($id, self::extensionFor($mime), $file->getContent());
+        $path = $this->store->put($id, $kind->extensionFor($mime), $file->getContent());
 
         $media = new Media(
             $id,
@@ -70,18 +70,6 @@ final readonly class UploadMediaHandler
         return $media;
     }
 
-    private static function extensionFor(string $mime): string
-    {
-        return match ($mime) {
-            'image/png' => 'png',
-            'image/jpeg' => 'jpg',
-            'image/webp' => 'webp',
-            'image/gif' => 'gif',
-            'video/mp4' => 'mp4',
-            'video/webm' => 'webm',
-            default => '',
-        };
-    }
 
     private static function human(int $bytes): string
     {

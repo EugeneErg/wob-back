@@ -97,15 +97,25 @@ final class WogGeometryTest extends TestCase
         self::assertSame(['deadly' => true], WogGeometry::surfaceOf('geomkiller', $miss));
         self::assertSame([], $said);
 
-        // Mostly deadly becomes deadly, and says so: the difference is real and
-        // must not disappear quietly.
-        self::assertSame(['deadly' => true], WogGeometry::surfaceOf('mostlydeadly', $miss));
-        self::assertCount(1, $said);
+        // Почти смертельная — смертельная, щадящая крепких. Раньше она молча
+        // становилась просто смертельной и уносила с собой замысел: череп в
+        // исходнике помечен неуязвимым и обязан пройти там, где перемалывает
+        // обычных.
+        self::assertSame(
+            ['deadly' => true, 'sparesTough' => true],
+            WogGeometry::surfaceOf('mostlydeadly', $miss),
+        );
 
-        // A tag nobody knows about surfaces rather than vanishing into an
-        // "otherwise nothing" branch.
-        WogGeometry::surfaceOf('ballbuster', $miss);
-        self::assertStringContainsString('ballbuster', $said[1]);
+        // Лопающая поверхность и порог разрушения тоже стали свойствами.
+        self::assertSame(['bursting' => true], WogGeometry::surfaceOf('ballbuster', $miss));
+        self::assertSame(['breakForce' => 2.0], WogGeometry::surfaceOf('break=2', $miss));
+        self::assertSame(['sticky' => 1800.0], WogGeometry::surfaceOf('kindasticky', $miss));
+        self::assertSame([], $said, 'ни один из них больше не уходит в отчёт');
+
+        // А тег, которого никто не знает, по-прежнему всплывает, а не тонет в
+        // ветке «иначе ничего».
+        WogGeometry::surfaceOf('нетакого', $miss);
+        self::assertStringContainsString('нетакого', $said[0]);
     }
 
     public function testSeveralTagsAllApply(): void

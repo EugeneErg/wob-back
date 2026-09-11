@@ -61,19 +61,45 @@ final class MediaTest extends TestCase
             ->assertHeader('Content-Type', $created['mime']);
     }
 
-    public function testTheBytesNeverLeaveTheirOwner(): void
+    /**
+     * Anybody may fetch anybody's file, signed in or not.
+     *
+     * This test used to say the opposite, and the reasoning was sound for the
+     * wrong subject: a random id is not a permission, so an unreleased intro
+     * stayed with its story. But a file is not part of one story. It is
+     * uploaded once, referred to by id, and by the author's decision anybody
+     * may use anybody's — with the use earning the uploader something later.
+     * A picture only its uploader can fetch cannot be used by anyone else, so
+     * the shelf would offer files that go blank as soon as a second author
+     * picked one.
+     *
+     * The imported story made it concrete: it is released, it is meant for
+     * strangers, and every picture in it answered 403 to everyone but the
+     * person who ran the import.
+     */
+    public function testTheBytesAreOpenToAnyone(): void
     {
         $this->signIn('author');
-        $url = $this->post('/api/media', ['file' => $this->pngFile('secret.png')])
+        $url = $this->post('/api/media', ['file' => $this->pngFile('shared.png')])
             ->assertStatus(201)
             ->json('url');
 
-        // A media id is a random UUID, but a random id is not a permission: an
-        // unreleased intro belongs to an unreleased story.
         $this->signIn('stranger');
-        $this->get($url)->assertStatus(403);
+        $this->get($url)->assertOk();
+
+        // And to somebody who is not signed in at all, which is the case a
+        // released story is played in.
+        $this->flushSession();
+        $this->get($url)->assertOk();
     }
 
+    /**
+     * The list stays private even though the files do not.
+     *
+     * "What have I got" and "give me this file" are different questions. The
+     * shelf is what turns ids into something browsable, and it is the author's
+     * own shelf.
+     */
     public function testAnUploadIsListedForItsAuthorOnly(): void
     {
         $this->signIn('author');

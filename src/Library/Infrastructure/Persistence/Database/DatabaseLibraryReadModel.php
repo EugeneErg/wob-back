@@ -187,7 +187,7 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             return null;
         }
 
-        return $this->bundle('story', [$story], $ownerId);
+        return $this->bundle('story', [$story]);
     }
 
     public function libraryBundle(string $ownerId): array
@@ -202,7 +202,7 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             }
         }
 
-        return $this->bundle('library', $stories, $ownerId);
+        return $this->bundle('library', $stories);
     }
 
     /**
@@ -210,7 +210,32 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
      *
      * @return array<string, mixed>
      */
-    private function bundle(string $kind, array $stories, string $ownerId): array
+    /**
+     * Все ассеты, названные где угодно внутри.
+     *
+     * @param array<string, bool> $out
+     */
+    private static function named(mixed $value, array &$out): void
+    {
+        if (!is_array($value)) {
+            return;
+        }
+
+        if (is_string($value['asset'] ?? null) && $value['asset'] !== '') {
+            $out[$value['asset']] = true;
+        }
+
+        foreach ($value as $item) {
+            self::named($item, $out);
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $stories
+     *
+     * @return array{stories: list<array<string, mixed>>, assets: list<array<string, mixed>>}
+     */
+    private function bundle(string $kind, array $stories): array
     {
         $chapters = [];
         $levels = [];
@@ -241,13 +266,57 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             }
         }
 
-        // Only the assets somebody actually marked hot travel with the file. The
-        // rest of the shelf is the author's workbench, not part of the story,
-        // and shipping it would make every export carry their whole palette.
-        $wanted = array_values(array_unique($hot));
+        // Что уезжает вместе с файлом: всё, на что ссылаются уровни, плюс то,
+        // что автор приколол к полке.
+        //
+        // Раньше здесь был только второй список, и рассуждение было верным для
+        // прежнего ассета: он был штампом, его сущности ложились в уровень
+        // копией, и «приколот» значило «может пригодиться». Ссылкой ассет стал
+        // позже — теперь уровень называет его и хранит одни отличия, и без
+        // названного его нельзя ни нарисовать, ни принять обратно.
+        //
+        // Видно это стало на импортированной истории: 58 уровней, 2706 шаров и
+        // ноль ассетов в выгрузке. Файл выглядел целым.
+        // Ссылка на ассет бывает не только у размещения, но и внутри данных:
+        // шар с начинкой называет ассетом то, что из него родится. Ищется это
+        // правилом о форме, а не по имени поля — объект со строковым `asset`
+        // есть ссылка, где бы он ни лежал, — чтобы список полей, за которыми
+        // надо следить, здесь не заводился вовсе.
+        $named = [];
 
+        foreach ($levels as $level) {
+            self::named($level['entities'], $named);
+        }
+
+        // И замыкание: начинка бывает вложенной, а вложенный вид сам нигде не
+        // поставлен. Без этого файл выглядел бы целым и молча терял то, что
+        // появляется только из лопнувшего.
+        $wanted = array_values(array_unique([...$hot, ...array_keys($named)]));
+        $seen = [];
+
+        while (true) {
+            $fresh = array_values(array_diff($wanted, $seen));
+
+            if ($fresh === []) {
+                break;
+            }
+
+            $seen = [...$seen, ...$fresh];
+            $rows = $this->db->table('assets')->whereIn('public_id', $fresh)->get();
+            $more = [];
+
+            foreach ($rows as $row) {
+                self::named(json_decode((string) $row->entities, true), $more);
+            }
+
+            $wanted = array_values(array_unique([...$wanted, ...array_keys($more)]));
+        }
+
+        // Без отбора по владельцу, намеренно и по той же причине, что и в
+        // AssetReferences: чужой ассет использовать можно, и разрешается ссылка
+        // вопросом «существует ли», а не «чей он». Отбор по владельцу здесь
+        // выкинул бы из файла ровно те ассеты, которых у получателя точно нет.
         $assets = $wanted === [] ? [] : $this->db->table('assets')
-            ->where('owner_id', $ownerId)
             ->whereIn('public_id', $wanted)
             ->get()
             ->map(fn (object $a): array => [
@@ -291,6 +360,7 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             "height" => (int) $l->height,
             "gravity" => $this->decode($l->gravity),
             "goal" => (int) $l->goal,
+            "extra" => $l->extra === null ? null : json_decode((string) $l->extra, true),
             "entities" => $this->decode($l->entities),
             "hot" => $this->decode($l->hot),
             "hash" => $l->content_hash,

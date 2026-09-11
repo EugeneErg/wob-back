@@ -122,6 +122,11 @@ final readonly class BundleReader
         return $value;
     }
 
+    /**
+     * @param list<Asset> $existing
+     *
+     * @return list<Asset>
+     */
     private function readAssets(mixed $raw, array $existing): array
     {
         $assets = [];
@@ -215,6 +220,8 @@ final readonly class BundleReader
                 (int) ($item->goal ?? 0),
                 array_map($this->placement(...), $this->objects($item->entities ?? [])),
                 $this->assetIds($item->hot ?? []),
+                (string) ($item->image ?? ''),
+                $this->extraOf($item->extra ?? null),
             );
         }
 
@@ -459,6 +466,35 @@ final readonly class BundleReader
         );
     }
 
+    /**
+     * Отличие сверх прохождения. Пусто — его нет, и это обычный случай.
+     *
+     * Мера читается закрытым списком: уровень, попросивший померить то, чего
+     * никто не считает, — это не уровень с особенностью, а опечатка, и молча
+     * принимать её значило бы обещать отличие, которое никогда не выдадут.
+     *
+     * @return array{by: string, value: float, required: bool}|null
+     */
+    private function extraOf(mixed $raw): ?array
+    {
+        if (!is_object($raw)) {
+            return null;
+        }
+
+        $by = (string) ($raw->by ?? '');
+
+        if (!in_array($by, ['time', 'moves', 'balls'], true)) {
+            return null;
+        }
+
+        return [
+            'by' => $by,
+            'value' => (float) ($raw->value ?? 0),
+            'required' => (bool) ($raw->required ?? false),
+        ];
+    }
+
+    /** @return list<AssetId> */
     private function assetIds(mixed $raw): array
     {
         $ids = [];

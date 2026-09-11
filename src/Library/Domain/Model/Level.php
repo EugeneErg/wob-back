@@ -43,9 +43,57 @@ final class Level
         // The film that follows a level lives on the point, not here — the same
         // level met twice can end two different ways.
         private string $image = '',
+
+        /**
+         * Отличие сверх прохождения: чем меряем, сколько и обязательно ли.
+         *
+         * Считать ничего не надо — время и ходы снимаются с каждой попытки
+         * наравне с тиками. Здесь только порог.
+         *
+         * Не входит в отпечаток содержимого, как и имя с картинкой: поднять
+         * планку с шестнадцати секунд до восемнадцати — не значит сделать
+         * другой уровень, и накопленные записи от этого не должны становиться
+         * непроверяемыми.
+         *
+         * @var array{by: string, value: float, required: bool}|null
+         */
+        private ?array $extra = null,
     ) {
         $this->rename($name);
         $this->setGoal($goal);
+        $this->setExtra($extra);
+    }
+
+    /** @return array{by: string, value: float, required: bool}|null */
+    public function extra(): ?array
+    {
+        return $this->extra;
+    }
+
+    /**
+     * Мера закрытым списком: время, ходы, шары. Открытый список означал бы,
+     * что уровень может попросить померить то, чего никто не считает, и
+     * узнать об этом было бы неоткуда.
+     *
+     * @param array{by: string, value: float, required: bool}|null $extra
+     */
+    public function setExtra(?array $extra): void
+    {
+        if ($extra === null) {
+            $this->extra = null;
+
+            return;
+        }
+
+        if (!in_array($extra['by'], ['time', 'moves', 'balls'], true)) {
+            throw InvariantViolation::because("Level extra must be measured by time, moves or balls");
+        }
+
+        if ($extra['value'] <= 0) {
+            throw InvariantViolation::because("Level extra must ask for more than nothing");
+        }
+
+        $this->extra = $extra;
     }
 
     public function name(): string
@@ -142,13 +190,6 @@ final class Level
         $this->hot = array_values($hot);
     }
 
-    /**
-     * The exact shape core/releases.js feeds to its hash: name, map position and
-     * hot assets are excluded on purpose. Renaming a level must not invalidate
-     * anyone records.
-     *
-     * @return array<string, mixed>
-     */
     public function setImage(string $image): void
     {
         $this->image = $image;
@@ -159,6 +200,13 @@ final class Level
         return $this->image;
     }
 
+    /**
+     * The exact shape core/releases.js feeds to its hash: name, map position and
+     * hot assets are excluded on purpose. Renaming a level must not invalidate
+     * anyone records.
+     *
+     * @return array<string, mixed>
+     */
     public function hashableContent(): array
     {
         return [

@@ -37,7 +37,15 @@ final class WogBallKind
      * heavier than the stiffness was chosen for — which is exactly how it
      * looked when it collapsed.
      */
-    private const MASS = 1 / 30;
+    /**
+     * Открыт наружу: этим же множителем переносится масса подвижной геометрии.
+     *
+     * Держать его тут, а не копией в двух местах, — потому что это одна
+     * величина. Разойдись они, тело и шар оказались бы в разных единицах, и
+     * заметно это стало бы не сразу: конструкция просто вела бы себя странно
+     * под тяжёлым ящиком.
+     */
+    public const MASS = 1 / 30;
     private const CLIMB = 95 / 2.0;
     private const FORCE = 1400 / 500;
     private const SPRING = 1600 / 9;
@@ -63,13 +71,42 @@ final class WogBallKind
      * @param array<string, string> $images resource id to path
      * @param array<string, string> $sounds resource id to path
      *
+     * @param array<string, array{smoothness: float, restitution: float}> $mats
+     *
      * @return array<string, mixed>
      */
-    public static function build(array $def, array $images, array $sounds, string $root): array
+    public static function build(array $def, array $images, array $sounds, string $root, array $mats = []): array
     {
         $a = $def['attrs'];
+
+        // shape="circle,d" или "rectangle,w,h": диаметр, а не радиус.
+        $parts = explode(',', $a['shape'] ?? 'circle,30');
+        $kind = trim($parts[0] ?? 'circle');
+        $bw = (float) ($parts[1] ?? 30);
+        $bh = (float) ($parts[2] ?? $bw);
+        // Скругление у прямоугольного тела — четверть меньшей стороны: у
+        // квадрата мягкий угол, у бруска 200×50 почти капсула, и ни в одном
+        // случае скругление не съедает форму. Отдельного числа в исходнике
+        // нет, а без скругления углы цеплялись бы за геометрию намертво.
+        $round = $kind === 'circle' ? $bw / 2 : min($bw, $bh) / 4;
+        $shape = [$kind, $bw, $round, $bh];
+
         $r = self::radiusOf($a);
+
+        // У прямоугольного тела радиус — это скругление, а не половина
+        // стороны: раньше `radiusOf` вписывал такое тело в круг, и брусок
+        // 200×50 становился кругом диаметром 50. Теперь форма переносится как
+        // есть, а `r` перестаёт быть «размером» и становится скруглением.
+        if ($round !== $r) {
+            $r = round($round, 2);
+        }
         $strand = WogFile::kids($def, 'strand')[0] ?? null;
+
+        // Из чего шар сделан. Материал общий с геометрией — та же таблица, те
+        // же трение и отскок, — и без него шар из теста и шар из камня
+        // отличались бы только картинкой. Умолчания взяты те же, что стояли
+        // зашитыми в движке, чтобы шар без материала вёл себя как прежде.
+        $m = $mats[$a['material'] ?? ''] ?? ['smoothness' => 0.55, 'restitution' => 0.12];
 
         $mass = round(self::num($a, 'mass', 20) * self::MASS, 3);
         $tower = (isset($a['towermass']) ? (float) $a['towermass'] : self::num($a, 'mass', 20)) * self::MASS;
@@ -119,15 +156,36 @@ final class WogBallKind
                 ? min(6000, max(100, round(self::num($strand['attrs'], 'springconstmax', 9) * self::SPRING)))
                 : 1600,
             'linkRest' => $strand !== null ? self::num($strand['attrs'], 'minlen', 0) : 0,
-            // dampfac is not carried over: the two scales are not comparable,
-            // and a number that looks transferable but is not is worse than an
-            // honest gap in the report.
-            'linkDamping' => 0.25,
+            // dampfac carries straight across, because both sides now mean the
+            // same thing by it: a fraction of critical damping.
+            //
+            // It used to go into the report as "scales do not line up", and
+            // that was the right call at the time — ours was a fraction of
+            // relative velocity removed per substep, which cannot be compared
+            // with a number reaching 1.9. But the format's own description
+            // gives absolute thresholds — below 0.1 a strand wobbles for a long
+            // time, above 0.7 the wobble dies quickly, most balls use 0.9 —
+            // and absolute thresholds only hold for a dimensionless ratio. A
+            // coefficient would have to be read together with the ball's mass
+            // and spring constant, which run from 3 to 200 and from 2 to 9
+            // across the set. So dampfac is a damping ratio, and the engine now
+            // takes one too.
+            'linkDamping' => $strand !== null ? min(4, self::num($strand['attrs'], 'dampfac', 0.9)) : 0.9,
             'linkBreak' => $strand !== null ? round(self::num($strand['attrs'], 'maxforce', 600) * self::BREAK) : 26000,
             'linkRope' => $strand !== null && ($strand['attrs']['type'] ?? '') === 'rope',
             'linkSrc' => $strand !== null && isset($strand['attrs']['image'])
                 ? $picture(self::first($strand['attrs']['image']))['src']
                 : '',
+            // Липкость. В исходнике это три признака без величины: липнет
+            // всегда, липнет только в конструкции, липнет только вне её. Силу
+            // приходится назвать самим, и она выбрана не на глаз: тяготение в
+            // наборе — 1800 у 54 уровней из 58, а держаться на потолке значит
+            // перебить именно его. Взято вдвое больше, чтобы прилипшего не
+            // сбивал первый же удар прилетевшего шара.
+            'sticky' => self::stickyWhen($a) === '' ? 0 : 3600,
+            'stickyWhen' => self::stickyWhen($a) === '' ? 'always' : self::stickyWhen($a),
+            'smoothness' => $m['smoothness'],
+            'bounce' => $m['restitution'],
             'linkWidth' => 0.6,
             'burnTime' => self::num($a, 'burntime', 0),
             'fireLinks' => $strand !== null && isset($strand['attrs']['fireparticles']),
@@ -141,6 +199,42 @@ final class WogBallKind
             'waves' => self::waves($def, $r),
             'sizes' => self::sizes($a),
             'sounds' => self::sounds($def, $sounds),
+            // Крепкий: щадящая поверхность его не берёт. В исходнике признак
+            // называется неуязвимостью, но губит крепкого по-прежнему всё, что
+            // помечено смертельным без оговорок, — то есть это не полная
+            // неуязвимость, а стойкость к одному разряду поверхностей.
+            // Форма тела. Круг — это прямоугольник с нулевыми полуразмерами,
+            // так что оба случая ложатся в одно и то же без особых веток.
+            //
+            // Скругление берётся как четверть меньшей стороны: у квадрата это
+            // мягкий угол, у бруска 200×50 — почти капсула, и ни в одном
+            // случае скругление не съедает форму целиком. Отдельного числа в
+            // исходнике нет, а без скругления углы цеплялись бы за геометрию
+            // намертво.
+            'halfW' => $shape[0] === 'circle' ? 0.0 : round($shape[1] / 2 - $shape[2], 2),
+            'halfH' => $shape[0] === 'circle' ? 0.0 : round($shape[3] / 2 - $shape[2], 2),
+            'tough' => ($a['invulnerable'] ?? 'false') === 'true',
+            // Лопающийся: по описанию формата лопаются те, у кого есть
+            // начинка. Признак отдельный, а не выведенный из неё, чтобы автор
+            // мог сделать и лопающийся пустой шар, и полный, который шестерни
+            // не берут.
+            'poppable' => trim($a['contains'] ?? '') !== '',
+            // Ключа у шара нет. Однажды я проставил сюда название вида — чтобы
+            // замок мог ждать «красную таблетку», — и это неверно дважды: вид
+            // отвечает на «какой ты», а ключ на «кто ты», и один ключ на две с
+            // половиной тысячи обычных шаров означал бы срабатывание неизвестно
+            // от чего. К тому же спроса не было: замок, ради которого это
+            // делалось, так и не поставлен.
+            //
+            // Понадобится — ключ проставит тот, кто ставит замок, и ровно тем
+            // шарам, которых замок ждёт.
+            'key' => '',
+            // Можно ли цепляться к нему, пока он прилип. В наборе разведено
+            // ровно по смыслу: у липких якорей разрешено — они и держатся за
+            // стену затем, чтобы к ним цеплялись, — а у липких бомб и колючек
+            // запрещено. Умолчание истинное, как и у обычной сцепки: шар, про
+            // который не сказано ничего, ведёт себя как раньше.
+            'anchorableStuck' => ($a['stuckattachment'] ?? 'true') !== 'false',
             'suckable' => self::flag($a, 'suckable', true),
         ];
     }
@@ -389,6 +483,64 @@ final class WogBallKind
             1 => $parts[0],
             default => ($parts[0] + $parts[1]) / 2,
         };
+    }
+
+    /** @param array<string, string> $a */
+    /**
+     * Который из трёх случаев липкости, если он вообще есть.
+     *
+     * Порядок проверки не важен: в наборе ни у одного вида не стоит больше
+     * одного из трёх признаков сразу.
+     *
+     * @param array<string, string> $a
+     */
+    private static function stickyWhen(array $a): string
+    {
+        if (($a['sticky'] ?? 'false') === 'true') {
+            return 'always';
+        }
+
+        if (($a['stickyattached'] ?? 'false') === 'true') {
+            return 'built';
+        }
+
+        if (($a['stickyunattached'] ?? 'false') === 'true') {
+            return 'free';
+        }
+
+        return '';
+    }
+
+    /**
+     * Начинка из `contains`: пары «сколько, кого», через запятую.
+     *
+     * @param array<string, string> $a
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function births(array $a): array
+    {
+        $raw = trim($a['contains'] ?? '');
+
+        if ($raw === '') {
+            return [];
+        }
+
+        $bits = array_map('trim', explode(',', $raw));
+        $out = [];
+
+        for ($i = 0; $i + 1 < count($bits); $i += 2) {
+            $count = (int) $bits[$i];
+            $kind = $bits[$i + 1];
+
+            if ($count <= 0 || $kind === '') {
+                continue;
+            }
+
+            $out[] = ['count' => $count, 'asset' => 'wog-ball-' . mb_strtolower($kind)];
+        }
+
+        return $out;
     }
 
     /** @param array<string, string> $a */

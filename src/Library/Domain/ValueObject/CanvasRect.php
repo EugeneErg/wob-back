@@ -44,13 +44,22 @@ final readonly class CanvasRect implements JsonSerializable
         }
     }
 
-    public static function fromRow(object $row): self
+    /**
+     * Строка из базы — не объект с известными полями, а мешок свойств: чтение
+     * `$row->canvas_x` разбору кода ничего не говорит. Поэтому поля берутся
+     * через массив, где отсутствие названо явно.
+     *
+     * @param object|array<string, mixed> $row
+     */
+    public static function fromRow(object|array $row): self
     {
+        $bag = (array) $row;
+
         return new self(
-            (float) $row->canvas_x,
-            (float) $row->canvas_y,
-            (float) $row->canvas_w,
-            (float) $row->canvas_h,
+            (float) ($bag['canvas_x'] ?? 0),
+            (float) ($bag['canvas_y'] ?? 0),
+            (float) ($bag['canvas_w'] ?? 0),
+            (float) ($bag['canvas_h'] ?? 0),
         );
     }
 

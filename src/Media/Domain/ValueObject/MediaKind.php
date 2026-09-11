@@ -53,6 +53,36 @@ enum MediaKind: string
         return self::from($kind);
     }
 
+    /**
+     * What to call the file on disk.
+     *
+     * This lives next to the list of accepted formats rather than beside the
+     * code that stores bytes, because it is the same decision written twice:
+     * every mime this game accepts needs a name, and a mime that has one but is
+     * not accepted, or is accepted and has none, is a mistake either way.
+     *
+     * Keeping them apart cost exactly that. Sound was added to the list above
+     * and the extension table, three files away, was not touched — so every
+     * `.ogg` landed on the disk with no extension at all. Nothing failed: the
+     * bytes are served with a stored mime and play fine. It only shows up when
+     * a human opens the media folder to see what is in it.
+     */
+    public function extensionFor(string $mime): string
+    {
+        return match (strtolower(trim(explode(';', $mime)[0]))) {
+            'image/png' => 'png',
+            'image/jpeg' => 'jpg',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            'video/mp4' => 'mp4',
+            'video/webm', 'audio/webm' => 'webm',
+            'audio/ogg' => 'ogg',
+            'audio/mpeg' => 'mp3',
+            'audio/wav' => 'wav',
+            default => '',
+        };
+    }
+
     /** The ceiling for this kind, in bytes. */
     public function maxBytes(): int
     {

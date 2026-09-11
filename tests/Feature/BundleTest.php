@@ -281,6 +281,87 @@ final class BundleTest extends TestCase
         $this->getJson('/api/library')->assertJsonCount(1, 'assets');
     }
 
+    /**
+     * Выгрузка везёт ассеты, на которые ссылаются уровни, а не только
+     * приколотые к полке.
+     *
+     * Раньше отбор шёл по одному «приколот», и для прежнего ассета это было
+     * верно: он был штампом, его сущности ложились в уровень копией, и файл без
+     * него оставался полным. Ссылкой ассет стал позже — уровень называет его и
+     * хранит одни отличия, — и с тех пор выгрузка молча теряла всё, чего никто
+     * не приколол. На импортированной истории это дало 58 уровней, 2706 шаров и
+     * ноль ассетов: файл, который выглядит целым и не открывается.
+     */
+    public function testAnExportCarriesTheAssetsItsLevelsAreBuiltOn(): void
+    {
+        $this->signIn('author');
+
+        $level = $this->rawLevel('lvl-d');
+        $level['entities'] = [['id' => 'b-1', 'type' => 'game-ball', 'asset' => 'as-pinned', 'data' => ['x' => 10]]];
+
+        $this->postJson('/api/library/import', [
+            'format' => 'goo-bundle',
+            'version' => 1,
+            'kind' => 'story',
+            // Ничего не приколото: список hot пуст везде.
+            'stories' => [['id' => 'story-d', 'title' => 'Built on an asset', 'cover' => '#000', 'chapters' => ['ch-d'], 'hot' => []]],
+            'chapters' => [[
+                'id' => 'ch-d', 'title' => 'Ch', 'image' => '#000',
+                'nodes' => [['levelId' => 'lvl-d', 'x' => 10, 'y' => 10]], 'edges' => [], 'hot' => [],
+            ]],
+            'levels' => [$level],
+            'assets' => [['id' => 'as-pinned', 'type' => 'game-ball', 'title' => 'A ball', 'data' => ['r' => 13]]],
+        ])->assertStatus(201);
+
+        $out = $this->getJson('/api/stories/story-d/export')->assertOk()->json();
+
+        self::assertCount(1, $out['assets']);
+        self::assertSame('as-pinned', $out['assets'][0]['id']);
+    }
+
+    /**
+     * Отличие сверх прохождения едет вместе с уровнем, а мера читается
+     * закрытым списком.
+     *
+     * Считать ничего не надо — время и ходы снимаются с каждой попытки
+     * наравне с тиками. Хранится только порог, и уровень, попросивший померить
+     * то, чего никто не считает, — это опечатка, а не особенность: принять её
+     * молча значило бы пообещать отличие, которого никогда не выдадут.
+     */
+    public function testALevelCarriesItsBonusMark(): void
+    {
+        $this->signIn('author');
+
+        $good = $this->rawLevel('lvl-e');
+        $good['extra'] = ['by' => 'time', 'value' => 16, 'required' => false];
+
+        $odd = $this->rawLevel('lvl-f');
+        $odd['extra'] = ['by' => 'вкус', 'value' => 5, 'required' => true];
+
+        $this->postJson('/api/library/import', [
+            'format' => 'goo-bundle',
+            'version' => 1,
+            'kind' => 'story',
+            'stories' => [['id' => 'story-e', 'title' => 'Marked', 'cover' => '#000', 'chapters' => ['ch-e'], 'hot' => []]],
+            'chapters' => [[
+                'id' => 'ch-e', 'title' => 'Ch', 'image' => '#000',
+                'nodes' => [['levelId' => 'lvl-e', 'x' => 10, 'y' => 10], ['levelId' => 'lvl-f', 'x' => 20, 'y' => 10]],
+                'edges' => [], 'hot' => [],
+            ]],
+            'levels' => [$good, $odd],
+            'assets' => [],
+        ])->assertStatus(201);
+
+        $out = collect($this->getJson('/api/stories/story-e/export')->assertOk()->json('levels'))
+            ->keyBy('id');
+
+        self::assertSame(
+            ['by' => 'time', 'value' => 16, 'required' => false],
+            $out['lvl-e']['extra'],
+        );
+        self::assertNull($out['lvl-f']['extra'], 'мера, которой никто не считает, не принимается');
+    }
+
     public function testGarbageIsRefusedWithoutBlamingTheServer(): void
     {
         $this->signIn('author');

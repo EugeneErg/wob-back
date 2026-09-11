@@ -15,7 +15,6 @@ use Wob\Media\Domain\Model\Media;
 use Wob\Media\Domain\Port\MediaStore;
 use Wob\Media\Domain\Repository\MediaRepository;
 use Wob\Media\Domain\ValueObject\MediaId;
-use Wob\Shared\Domain\Exception\AccessDenied;
 use Wob\Shared\Domain\Exception\InvariantViolation;
 use Wob\Shared\Domain\Exception\NotFound;
 
@@ -50,24 +49,35 @@ final readonly class MediaController
     }
 
     /**
-     * The bytes.
+     * The bytes. Open to anyone who has the id.
      *
-     * Behind a session and an ownership check, like every other draft route:
-     * an unreleased intro is part of an unreleased story, and a random id is
-     * not a permission. When published content starts pointing at media this
-     * will need a public path too, but guessing at that shape now would mean
-     * guessing wrong.
+     * This used to be behind a session and an ownership check, on the reasoning
+     * that a random id is not a permission and an unreleased intro belongs to
+     * an unreleased story. Consistent, and wrong about what a file is here.
+     *
+     * A file is not part of one story. It is uploaded once and referred to by
+     * id, and the author's decision is that anybody may use anybody's — that is
+     * what the media shelf is for, and using someone else's is meant to earn
+     * them something later. A picture that only its uploader can fetch cannot
+     * be reused by anyone, so the shelf would show files that go blank the
+     * moment a second author picks one.
+     *
+     * The immediate cause was smaller and unarguable: a released story refers
+     * to the files it is made of, and it is meant to be played by strangers.
+     * Every picture in an imported story was a 403 for everyone except the
+     * person who ran the import.
+     *
+     * What is left private is the list, not the file. `index` still answers
+     * with one author's uploads, because "what have I got" is a different
+     * question from "give me this file", and knowing an id is still the only
+     * way in — the shelf is what turns ids into something browsable.
      */
-    public function show(Request $request, string $id): StreamedResponse
+    public function show(string $id): StreamedResponse
     {
         $media = $this->media->find(new MediaId($id));
 
         if ($media === null || !$this->store->exists($media->path())) {
             throw NotFound::of('Media', $id);
-        }
-
-        if (!$media->belongsTo($this->owner($request))) {
-            throw AccessDenied::of('Media', $id);
         }
 
         return $this->stream($media);
@@ -84,7 +94,12 @@ final readonly class MediaController
             // the app that can genuinely be cached forever. It matters most for
             // the case this exists to serve: an intro that would otherwise be
             // re-fetched every time a player restarts a level.
-            'Cache-Control' => 'private, max-age=31536000, immutable',
+            //
+            // Public rather than private now that the file is. Under 'private'
+            // a shared cache must keep a copy per session, and the one picture
+            // a hundred players load from the same imported story would be
+            // fetched a hundred times from the origin.
+            'Cache-Control' => 'public, max-age=31536000, immutable',
         ];
 
         $stream = $this->store->readStream($media->path());

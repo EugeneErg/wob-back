@@ -90,7 +90,7 @@ final class WogGeometry
      *
      * @param callable(string): void $miss
      *
-     * @return array<string, bool>
+     * @return array<string, bool|float>
      */
     public static function surfaceOf(?string $tags, callable $miss): array
     {
@@ -101,16 +101,36 @@ final class WogGeometry
                 'unwalkable' => $out['walkable'] = false,
                 'walkable' => $out['walkable'] = true,
                 'detaching' => $out['detaching'] = true,
+                // Лопающая поверхность. По описанию формата шар с начинкой
+                // лопается именно от касания такой — это парная половина к
+                // содержимому, а не разновидность смертельности.
+                'ballbuster' => $out['bursting'] = true,
+                // Липкая поверхность. Величины в исходнике нет — только сам
+                // признак, — поэтому названа она здесь: 1800 это тяготение
+                // уровня в наборе, а удержать коснувшегося значит перебить
+                // именно его. Ровно столько, а не с запасом: липкая стена
+                // должна держать, но не хватать намертво пролетающих мимо.
+                'kindasticky' => $out['sticky'] = 1800.0,
                 'stopsign' => $out['stopsign'] = true,
                 'deadly', 'geomkiller' => $out['deadly'] = true,
-                // "Mostly deadly" is not the same as deadly: in the original it
-                // spares some balls. We make it deadly and say so out loud,
-                // because otherwise the difference disappears without a trace.
-                'mostlydeadly' => (static function () use (&$out, $miss): void {
+                // Почти смертельная — смертельная, которая щадит крепких.
+                //
+                // Раньше она становилась просто смертельной, и это уносило с
+                // собой замысел: череп в исходнике помечен неуязвимым и обязан
+                // пройти там, где перемалывает обычных. Без разницы между
+                // «губит всех» и «губит всех, кроме крепких» такой уровень
+                // становится непроходимым — причём тихо, потому что сама
+                // поверхность работает.
+                'mostlydeadly' => (static function () use (&$out): void {
                     $out['deadly'] = true;
-                    $miss('«почти смертельная» поверхность стала полностью смертельной');
+                    $out['sparesTough'] = true;
                 })(),
-                default => $miss("тег геометрии «{$tag}»"),
+                // Порог разрушения: «break=2» значит, что тело разлетится от
+                // взрыва силой два и выше. Мерится в тех же единицах, что сила
+                // взрыва у шаров, и сравнивается с ней напрямую.
+                default => str_starts_with($tag, 'break=')
+                    ? $out['breakForce'] = (float) substr($tag, 6)
+                    : $miss("тег геометрии «{$tag}»"),
             };
         }
 
@@ -124,6 +144,55 @@ final class WogGeometry
      *
      * @return list<array{0: float, 1: float}>
      */
+    /**
+     * Середина очертания — среднее по вершинам.
+     *
+     * Не центр тяжести: для оси вращения хватает и середины, а честный центр
+     * тяжести многоугольника потребовал бы разбиения на треугольники ради
+     * разницы, которой на выпуклых шестернях набора нет.
+     *
+     * @param list<array{0: float, 1: float}> $pts
+     *
+     * @return array{0: float, 1: float}
+     */
+    public static function middleOf(array $pts): array
+    {
+        if ($pts === []) {
+            return [0.0, 0.0];
+        }
+
+        $x = 0.0;
+        $y = 0.0;
+
+        foreach ($pts as [$px, $py]) {
+            $x += $px;
+            $y += $py;
+        }
+
+        return [self::fixed($x / count($pts), 2), self::fixed($y / count($pts), 2)];
+    }
+
+    /** @return list<array{0: float, 1: float}> */
+    /**
+     * Охватывающая рамка очертания.
+     *
+     * @param list<array{0: float, 1: float}> $pts
+     *
+     * @return array{w: float, h: float}
+     */
+    public static function boxOf(array $pts): array
+    {
+        if ($pts === []) {
+            return ['w' => 0.0, 'h' => 0.0];
+        }
+
+        $xs = array_column($pts, 0);
+        $ys = array_column($pts, 1);
+
+        return ['w' => max($xs) - min($xs), 'h' => max($ys) - min($ys)];
+    }
+
+    /** @return list<array{0: float, 1: float}> */
     public static function rectPoints(
         float $x,
         float $y,

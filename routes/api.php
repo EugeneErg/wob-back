@@ -47,6 +47,16 @@ Route::post("auth/dev", [AuthController::class, "dev"]);
 Route::get("catalog", [CatalogController::class, "index"]);
 Route::get("catalog/{storyId}", [CatalogController::class, "play"]);
 
+// Байты файла — открыты, как и витрина, и по той же причине: выпущенную
+// историю играют посторонние, а состоит она из своих картинок и звуков.
+// Отдельно от этого автор решил, что чужие файлы можно брать и использовать, и
+// что за использование создавшему потом будет вознаграждение, — а файл, который
+// умеет открыть только заливший, взять нельзя.
+//
+// Закрытым остаётся список, а не файл: «что у меня есть» и «дай этот файл» —
+// разные вопросы, и ид по-прежнему единственный вход.
+Route::get("media/{id}", [MediaController::class, "show"]);
+
 Route::middleware(ResolveDomainUser::class)->group(static function (): void {
     Route::get("auth/me", [AuthController::class, "me"]);
     Route::post("auth/logout", [AuthController::class, "signOut"]);
@@ -57,7 +67,6 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
     // sixty-megabyte video base64ed into it is not.
     Route::post("media", [MediaController::class, "upload"]);
     Route::get("media", [MediaController::class, "index"]);
-    Route::get("media/{id}", [MediaController::class, "show"]);
 
     // The author's shelf of reusable pieces. Owned by them, not by any one
     // story, and shared across everything they make.

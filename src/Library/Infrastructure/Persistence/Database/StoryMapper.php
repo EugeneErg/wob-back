@@ -101,7 +101,8 @@ final class StoryMapper
             array_map(EntityPlacement::fromObject(...), $this->decodeList($row->entities)),
             $this->assetIds($row->hot),
             (string) ($row->image ?? ''),
-            // Девятым аргументом сюда шёл $row->intro, а конструктор принимает
+            $row->extra === null ? null : (array) $this->decode($row->extra),
+            // Десятым аргументом сюда шёл $row->intro, а конструктор принимает
             // восемь: PHP лишние позиционные аргументы userland-функции молча
             // проглатывает, поэтому ошибки не было — значение просто исчезало.
             // Ролика у уровня и нет: он принадлежит точке, потому что один и
@@ -179,6 +180,7 @@ final class StoryMapper
             "height" => $level->dimensions()->height,
             "gravity" => $this->encode($level->gravity()->toArray()),
             "goal" => $level->goal(),
+            "extra" => $level->extra() === null ? null : json_encode($level->extra()),
             "entities" => $this->encode(array_map(
                 static fn (EntityPlacement $e): stdClass => $e->jsonSerialize(),
                 $level->entities(),

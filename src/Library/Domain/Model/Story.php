@@ -338,7 +338,13 @@ final class Story extends AggregateRoot
         }
 
         $chapter = $this->chapter($chapterId);
-        $node = $chapter->node($from);
+        // Глава нашлась по точке, значит точка в ней есть. Но `node()` отвечает
+        // «может быть, нет», и полагаться на цепочку рассуждений вместо ответа
+        // нельзя: развалится она молча, при первом же расхождении между тем, кто
+        // ищет главу, и тем, кто ищет точку в главе.
+        $node = $chapter->node($from) ?? throw InvariantViolation::because(
+            sprintf("Chapter %s has no point %s", $chapterId->value, $from->value),
+        );
         $before = $node;
 
         $chapter->replaceNode($node->leadingTo($to));
@@ -360,7 +366,10 @@ final class Story extends AggregateRoot
         );
 
         $chapter = $this->chapter($chapterId);
-        $chapter->replaceNode($chapter->node($from)->notLeadingTo($to));
+        $node = $chapter->node($from) ?? throw InvariantViolation::because(
+            sprintf("Chapter %s has no point %s", $chapterId->value, $from->value),
+        );
+        $chapter->replaceNode($node->notLeadingTo($to));
     }
 
     /** Как выглядит глава: название и фон, на котором стоят точки. */
