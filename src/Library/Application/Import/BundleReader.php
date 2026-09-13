@@ -284,6 +284,7 @@ final readonly class BundleReader
                     )),
                 ),
                 (string) ($node->name ?? ''),
+                (string) ($node->note ?? ''),
                 (string) ($node->image ?? ''),
                 (string) ($node->outro ?? ''),
             );

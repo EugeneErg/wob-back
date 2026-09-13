@@ -319,13 +319,15 @@ final class StoryLoopsTest extends TestCase
         ])->assertOk();
 
         $this->patchJson("/api/stories/{$this->storyId}/chapters/{$this->chapterId}/nodes/{$two}", [
-            'name' => 'Второе место', 'image' => '#abc',
+            'name' => 'Второе место', 'note' => 'а тут развилка', 'image' => '#abc',
         ])->assertOk();
 
         $nodes = collect($this->getJson("/api/stories/{$this->storyId}")->json('chapters.0.nodes'));
 
         self::assertSame(10.0, (float) $nodes->firstWhere('id', $one)['x'], 'переезд лёг');
         self::assertSame('Второе место', $nodes->firstWhere('id', $two)['name'], 'подпись легла');
+        // Вторая строка под названием — своя графа, а не часть имени.
+        self::assertSame('а тут развилка', $nodes->firstWhere('id', $two)['note'], 'и вторая строка тоже');
 
         // И одна правка не затёрла другую.
         self::assertSame(90.0, (float) $nodes->firstWhere('id', $one)['y']);

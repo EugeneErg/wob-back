@@ -147,6 +147,212 @@ final class WogBallKindTest extends TestCase
     }
 
     /** @return array<string, mixed> */
+    /**
+     * The player's hand: what may be picked up, what may be pulled out, and how
+     * far it has to be pulled.
+     *
+     * `common` has a detachstrand and still says detachable="false" — a built
+     * ball stands. Getting this backwards let every structure in the set be
+     * taken apart and rebuilt, which is not the game.
+     */
+    public function testAnOrdinaryBallStaysWhereItWasBuilt(): void
+    {
+        $ball = $this->build('common');
+
+        self::assertFalse($ball['detachable']);
+        self::assertTrue($ball['draggable']);
+        self::assertTrue($ball['climber']);
+        self::assertSame(0.0, $ball['angle']);
+    }
+
+    public function testADetachableBallComesOutOnlyWhenPulledFarEnough(): void
+    {
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="3" detachable="true">'
+            . '<strand type="spring" minlen="110" maxlen2="140" shrinklen="130" springconstmax="9" springconstmin="4.5" />'
+            . '<detachstrand maxlen="60" /></ball>');
+
+        self::assertTrue($ball['detachable']);
+        self::assertSame(60.0, $ball['detachDist']);
+        // minlen is a floor and shrinklen a ceiling — not one length every
+        // strand is pulled to.
+        self::assertSame(110.0, $ball['linkMin']);
+        self::assertSame(130.0, $ball['linkMax']);
+        self::assertSame(1600.0, $ball['linkSpring']);
+        self::assertSame(800.0, $ball['linkSpringFar']);
+    }
+
+    public function testWithoutADetachstrandNothingComesOut(): void
+    {
+        // The format calls the tag required for detaching.
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="2" detachable="true">'
+            . '<strand type="spring" minlen="100" maxlen2="140" /></ball>');
+
+        self::assertFalse($ball['detachable']);
+        // shrinklen has a default of its own, 140.
+        self::assertSame(140.0, $ball['linkMax']);
+    }
+
+    public function testABallWithNoStrandsNeverJoinsAStructure(): void
+    {
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="0" draggable="false" climber="false" />');
+
+        self::assertSame(0, $ball['maxLinks']);
+        self::assertFalse($ball['draggable']);
+        self::assertFalse($ball['climber']);
+    }
+
+    public function testABurningStrandCarriesItsSpeedAndDelay(): void
+    {
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="2" burntime="3">'
+            . '<strand type="spring" maxlen2="140" ignitedelay="0.5" burnspeed="2" fireparticles="fuseBurn" /></ball>');
+
+        // burnspeed counts per tick, and a tick is 1/50 — the same conversion
+        // the climb and walk speeds use.
+        self::assertSame(100.0, $ball['fireSpeed']);
+        self::assertSame(0.5, $ball['fireDelay']);
+        self::assertTrue($ball['fireLinks']);
+    }
+
+    public function testAStrandWithoutFireParticlesDoesNotBurn(): void
+    {
+        // The format calls fireparticles required for a strand to burn at all.
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="2" burntime="3">'
+            . '<strand type="spring" maxlen2="140" burnspeed="2" /></ball>');
+
+        self::assertFalse($ball['fireLinks']);
+    }
+
+    /**
+     * Two different questions about pushing other balls, and they are not the
+     * same one twice.
+     */
+    public function testTheTwoCollisionFlagsStaySeparate(): void
+    {
+        $block = $this->fromXml('<ball name="x" shape="rectangle,100,100" mass="30" strands="0" '
+            . 'speedvariance="0.2" collidewithattached="true" collideattached="true" />');
+        $floater = $this->fromXml('<ball name="y" shape="circle,30" mass="30" strands="1" '
+            . 'collideattached="true" />');
+
+        self::assertTrue($block['hitsBuilt']);
+        self::assertTrue($block['builtHitsBuilt']);
+        self::assertSame(0.2, $block['speedSpread']);
+
+        // A balloon pushes its neighbours apart while it hangs in a structure,
+        // yet flies through somebody else's.
+        self::assertFalse($floater['hitsBuilt']);
+        self::assertTrue($floater['builtHitsBuilt']);
+    }
+
+    public function testAnOrdinaryBallPushesNoOtherBall(): void
+    {
+        $ball = $this->build('common');
+
+        self::assertFalse($ball['hitsBuilt']);
+        self::assertFalse($ball['builtHitsBuilt']);
+        self::assertSame(0.2, $ball['speedSpread']);
+    }
+
+    public function testBlocksStackFreezeAndTurnInTheHand(): void
+    {
+        $block = $this->fromXml('<ball name="x" shape="rectangle,100,100" mass="600" strands="0" '
+            . 'stacking="true" autodisable="true" hingedrag="true" dragmass="100" />');
+
+        // Вес в руке вшестеро меньше собственного: рука тянет шар пружиной, и
+        // без облегчения глыбу было бы не поворочать.
+        self::assertSame(20.0, $block['mass']);
+        self::assertSame(3.333, $block['dragMass']);
+        self::assertTrue($block['stacks']);
+        self::assertTrue($block['freezeWhenStill']);
+        self::assertTrue($block['hingeDrag']);
+    }
+
+    public function testAnOrdinaryBallDoesNoneOfThat(): void
+    {
+        $ball = $this->build('common');
+
+        self::assertFalse($ball['stacks']);
+        self::assertFalse($ball['freezeWhenStill']);
+        self::assertFalse($ball['hingeDrag']);
+    }
+
+    public function testTheLaunchArrowCarriesItsLengthAndForce(): void
+    {
+        // Bit and Pilot both say fling="200,2.5": the arrow grows to 200, and
+        // the multiplier turns its length into a force, so a lighter ball goes
+        // further. The push is stored for a full draw; the engine divides it by
+        // the ball's mass.
+        $bit = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="2" fling="200,2.5" />');
+
+        self::assertSame(200.0, $bit['flingRange']);
+        self::assertSame(950.0, $bit['flingPush']);
+    }
+
+    public function testABallWithoutFlingIsJustCarried(): void
+    {
+        $ball = $this->build('common');
+
+        self::assertSame(0.0, $ball['flingRange']);
+        self::assertSame(0.0, $ball['flingPush']);
+    }
+
+    public function testASleeperHangsWhereItWasPutAndJumpsAwake(): void
+    {
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="2" '
+            . 'staticwhensleeping="true" jumponwakeup="true" />');
+
+        self::assertSame('place', $ball['sleepHold']);
+        self::assertTrue($ball['wakeJump']);
+    }
+
+    /**
+     * Спящий держится на месте, даже если у вида нет признака про это.
+     *
+     * Опровергает обратное сам набор: в `BulletinBoardSystem` вся левая
+     * постройка — двадцать два спящих `Pixel` без такого признака, и висит она
+     * в боковом тяготении без единой опоры.
+     */
+    public function testEveryKindHoldsStillWhileAsleep(): void
+    {
+        self::assertSame('place', $this->build('common')['sleepHold']);
+        self::assertSame('place', $this->build('Pixel')['sleepHold']);
+        self::assertFalse($this->build('common')['wakeJump']);
+    }
+
+    public function testEyesBlinkInTheGivenColourAndMayFollowTheMouse(): void
+    {
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="2" '
+            . 'blinkcolor="0,255,0" alwayslookatmouse="true" />');
+
+        self::assertSame('#00ff00', $ball['blinkColor']);
+        self::assertTrue($ball['eyesFollowPointer']);
+    }
+
+    public function testAColourWrittenWrongIsLeftOutRatherThanGuessed(): void
+    {
+        // Пропущенный цвет лучше выдуманного: шар просто не моргает.
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="2" blinkcolor="чепуха" />');
+
+        self::assertSame('', $ball['blinkColor']);
+    }
+
+    public function testWhatMakesABallStickAndWhereItIsDrawn(): void
+    {
+        $ball = $this->fromXml('<ball name="x" shape="circle,30" mass="30" strands="1" '
+            . 'maxattachspeed="1000" autoattach="true" isbehindstrands="true" />');
+
+        self::assertSame(1000.0, $ball['attachSpeed']);
+        self::assertTrue($ball['autoAttach']);
+        self::assertTrue($ball['behindLinks']);
+    }
+
+    /** @return array<string, mixed> */
+    private function fromXml(string $xml): array
+    {
+        $res = WogTables::resources(self::ROOT);
+
+        return WogBallKind::build(WogFile::parseXml($xml), $res['images'], $res['sounds'], self::ROOT);
+    }
+
     private function build(string $type): array
     {
         $def = WogFile::parseXml(WogFile::decrypt(

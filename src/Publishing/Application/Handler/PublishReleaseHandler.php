@@ -165,7 +165,12 @@ final readonly class PublishReleaseHandler
                 $out->x = $node->x;
                 $out->y = $node->y;
 
-                foreach (['name' => $node->name, 'image' => $node->image, 'outro' => $node->outro] as $k => $v) {
+                foreach ([
+                    'name' => $node->name,
+                    'note' => $node->note,
+                    'image' => $node->image,
+                    'outro' => $node->outro,
+                ] as $k => $v) {
                     if ($v !== '') {
                         $out->$k = $v;
                     }

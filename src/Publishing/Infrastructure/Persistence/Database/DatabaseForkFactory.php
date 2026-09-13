@@ -129,6 +129,7 @@ final readonly class DatabaseForkFactory implements ForkFactory
                         (float) $n->y,
                         array_map(static fn (string $c): NodeId => new NodeId($c), $n->next ?? []),
                         (string) ($n->name ?? ''),
+                        (string) ($n->note ?? ''),
                         (string) ($n->image ?? ''),
                         (string) ($n->outro ?? ''),
                     ),

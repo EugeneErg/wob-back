@@ -63,6 +63,12 @@ final readonly class MapNode
         // место в истории, со своим названием, своей картинкой и своим роликом.
         // На уровне остаётся рабочее имя, которым автор различает их в панели.
         public string $name = '',
+        // Вторая строка под названием: короткая подпись места. У неё своя
+        // работа, не та же, что у названия: название отвечает «куда я иду», а
+        // подпись — «что меня там ждёт». В чужом наборе такая строка есть почти
+        // у каждого уровня («проще вареной тянучки»), и без неё карта теряет
+        // половину голоса.
+        public string $note = '',
         public string $image = '',
         public string $outro = '',
     ) {
@@ -123,9 +129,9 @@ final readonly class MapNode
         return new self($this->id, $this->levelId, $x, $y, $this->next, $this->name, $this->image, $this->outro);
     }
 
-    public function describedAs(string $name, string $image, string $outro): self
+    public function describedAs(string $name, string $note, string $image, string $outro): self
     {
-        return new self($this->id, $this->levelId, $this->x, $this->y, $this->next, $name, $image, $outro);
+        return new self($this->id, $this->levelId, $this->x, $this->y, $this->next, $name, $note, $image, $outro);
     }
 
     public function leadingTo(NodeId $to): self

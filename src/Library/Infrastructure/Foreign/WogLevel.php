@@ -163,6 +163,13 @@ final class WogLevel
     /** Сколько шагов к цели дают расставленные замки. */
     private int $goalFromLocks = 0;
 
+    /**
+     * Вид каждого размещённого шара: id размещения → имя вида.
+     *
+     * @var array<string, string>
+     */
+    private array $kindOf = [];
+
     /** Сопротивление среды на весь уровень, 1/с. */
     private float $airDrag = 0.0;
 
@@ -326,6 +333,21 @@ final class WogLevel
         $this->maxy = $maxy;
         $this->w = $maxx - $minx;
         $this->h = $maxy - $miny;
+
+        // Комната растягивается до всего, что в ней стоит.
+        //
+        // Границы сцены в исходнике — это вид, а не стены: губят шары отдельные
+        // смертельные прямые, и шар, поставленный за краем, там живёт. У нас
+        // край мира — это край мира, и всё за ним пропадает без следа: в
+        // `ProductLauncher` шар стоит на тысячу пикселей ниже дна сцены и
+        // исчезал на первом же тике.
+        //
+        // Растягиваем только вниз и вправо, оставляя начало отсчёта на месте:
+        // ни одна уже посчитанная точка от этого не сдвинется.
+        foreach (WogFile::kids($this->level, 'BallInstance') as $b) {
+            $this->w = max($this->w, $this->x($this->num($b['attrs'], 'x', 0)) + 100);
+            $this->h = max($this->h, $this->y($this->num($b['attrs'], 'y', 0)) + 100);
+        }
     }
 
     /** The original's y axis points up and ours points down. */
@@ -506,12 +528,42 @@ final class WogLevel
             ? ['fill' => 'transparent', 'edge' => 'transparent']
             : [];
 
+        // Три свойства, которых раньше не читали вовсе, — и каждое меняет, как
+        // уровень играется.
+        //
+        // `contacts="false"` — геометрия без твёрдости. Отдельного описания у
+        // атрибута нет (страница «Making Geometry less Solid» на goofans так и
+        // не написана), и смысл выведен из данных, а не прочитан. В наборе
+        // таких кусков 32. Пятнадцать названы как датчики — `killarea`,
+        // `detachArea`, `bustArea`, `endDetector`, `invisiDetacher` — и несут
+        // теги, действующие на касание: сделанные твёрдыми, они стояли стенами
+        // посреди прохода. Остальные семнадцать — скелет робота в
+        // `Deliverance`, который виден только в развязке и не должен мешать
+        // до неё.
+        //
+        // `nogeomcollisions="true"` — сквозь неё проходит другая геометрия, но
+        // не шары. Так описан приём в разборе механизмов на goofans: планку над
+        // устьем трубы блоки проходят, а шары нет. В наборе так сидит голова
+        // на шее в `Chain` и рука в гнезде в `GeneticSortingMachine`.
+        //
+        // `strandgeom` — настройка уровня: запрещено ли строить сквозь
+        // геометрию. У нас это свойство каждой поверхности, поэтому уровень
+        // раздаёт его всей своей геометрии. Нетвёрдая строить не мешает при
+        // любом значении — мешать там нечему.
+        $solidness = ($attrs['contacts'] ?? '') !== 'false';
+        $flags = [
+            'solid' => $solidness,
+            'touchesBodies' => ($attrs['nogeomcollisions'] ?? '') !== 'true',
+            'blocksLinks' => $solidness && ($this->level['attrs']['strandgeom'] ?? 'false') === 'true',
+        ];
+
         if ($static) {
             $id = $this->id('t');
             $data = [
                 'points' => $pts, 'smoothness' => $m['smoothness'], 'bounce' => $m['restitution'],
                 'walkable' => true, 'deadly' => false, 'sparesTough' => false,
                 'detaching' => false, 'bursting' => false, 'sticky' => 0.0, 'stopsign' => false,
+                ...$flags,
                 'fill' => '#2a3326', 'edge' => '#66804f',
             ];
         } else {
@@ -538,6 +590,7 @@ final class WogLevel
                 'walkable' => true, 'deadly' => false, 'sparesTough' => false,
                 'detaching' => false, 'bursting' => false, 'sticky' => 0.0, 'stopsign' => false,
                 'breakForce' => 0.0,
+                ...$flags,
                 // Слово-ключ: имя тела из исходника, если оно есть. Замок с
                 // таким же словом от него откроется.
                 'key' => (string) ($attrs['id'] ?? ''),
@@ -672,7 +725,16 @@ final class WogLevel
      */
     private function hinges(): void
     {
-        foreach (WogFile::kids($this->scene, 'hinge') as $h) {
+        // Сначала те шарниры, что держат тело за мир, и только потом сварка.
+        // Порядок нужен затем, чтобы при сварке уже было видно, какая из двух
+        // сторон закреплена: она и должна стать старшей.
+        $all = WogFile::kids($this->scene, 'hinge');
+        $order = array_merge(
+            array_filter($all, static fn (array $h): bool => !isset($h['attrs']['body2'])),
+            array_filter($all, static fn (array $h): bool => isset($h['attrs']['body2'])),
+        );
+
+        foreach ($order as $h) {
             $a = $this->byGeomId[$h['attrs']['body1'] ?? ''] ?? null;
             $second = $h['attrs']['body2'] ?? null;
             $b = $second === null ? null : ($this->byGeomId[$second] ?? null);
@@ -692,9 +754,39 @@ final class WogLevel
             $hi = $this->numOrNull($h['attrs'], 'histop');
 
             if ($lo !== null && $hi !== null && $lo === $hi) {
-                if ($b !== null && !$a['static'] && !$b['static']) {
-                    $this->entities[$b['at']]['parent'] = $a['id'];
+                if ($b !== null) {
+                    if (!$a['static'] && !$b['static']) {
+                        // Старшим становится тот, кто сам за что-то держится.
+                        //
+                        // В записи стороны равноправны: кто назван первым, дело
+                        // случая. А у нас старший ведёт младшего за собой, и
+                        // поставить старшим свободное тело значит подвесить
+                        // связку в пустоту. В `RedCarpet` так и вышло: рычаг с
+                        // опорой стал младшим при свободном лезвии, всё это
+                        // поехало вниз, накрыло постройку и убило шесть шаров
+                        // за три секунды — а по прохождению ковёр там убивает
+                        // только после того, как игрок опустит груз.
+                        $holds = fn (array $side): bool => $side['static']
+                            || ($this->entities[$side['at']]['data']['pivots'] ?? []) !== [];
+
+                        [$up, $down] = $holds($b) && !$holds($a) ? [$b, $a] : [$a, $b];
+                        $this->entities[$down['at']]['parent'] = $up['id'];
+                    }
+
+                    continue;
                 }
+
+                // Шарнир с ОДНИМ телом держит его за мир: по описанию приёма
+                // тело после этого «двигается, но само не вращается». А
+                // совпавшие пределы поворота отнимают и это — тело просто
+                // приколочено на месте.
+                //
+                // Раньше сюда попадала и такая запись, и её принимали за
+                // сварку двух тел; сваривать было не с чем, и тело оставалось
+                // свободным. В `InfestyTheWorm` на таких шарнирах висят все
+                // четыре площадки, и без них уровень осыпался целиком: сорок
+                // шаров из сорока четырёх улетали вниз за две секунды.
+                $this->entities[$a['at']]['data']['static'] = true;
 
                 continue;
             }
@@ -1069,6 +1161,50 @@ final class WogLevel
      * @param array<string, string>                          $a
      * @param array{x: float, y: float, w: float, h: float}   $spot
      */
+    /**
+     * Вспышка частиц по описанию эффекта — теми же числами, что и постоянный
+     * источник в уровне, только вокруг точки и на один раз.
+     *
+     * Отдельным входом, потому что этим же переводом пользуется сборка ассетов:
+     * лопающийся шар и бомба носят свой эффект с собой, и собирается он не в
+     * уровне, а рядом с шаром.
+     *
+     * @param array<string, string> $a
+     * @param array<string, string> $images
+     *
+     * @return array{data: array<string, mixed>, media: array<string, string>}|null
+     */
+    public static function burst(array $a, array $images, string $root, float $maxParts, float $rate): ?array
+    {
+        $empty = ['tag' => 'x', 'attrs' => [], 'children' => []];
+        $level = new self(
+            'burst',
+            $empty,
+            $empty,
+            ['images' => $images, 'sounds' => []],
+            $root,
+            [],
+            [],
+            [],
+            [],
+            static function (string $what, int $count): void {
+                // Вспышка у шара ничего не теряет молча: всё, что мог бы
+                // сказать перевод, уже сказано про тот же эффект в уровне.
+            },
+        );
+        $level->emitter($a, ['x' => 0.0, 'y' => 0.0, 'w' => 0.0, 'h' => 0.0], $maxParts, $rate, null);
+
+        if ($level->entities === []) {
+            return null;
+        }
+
+        return ['data' => $level->entities[0]['data'], 'media' => $level->media];
+    }
+
+    /**
+     * @param array<string, string>                        $a
+     * @param array{x: float, y: float, w: float, h: float} $spot
+     */
     private function emitter(array $a, array $spot, float $maxParts, float $rate, ?string $depth): void
     {
         $srcs = [];
@@ -1217,14 +1353,32 @@ final class WogLevel
             }
 
             [$fx, $fy] = $this->pair($a, 'force');
+
+            // Поле, которое СЧИТАЕТСЯ ПО ВЕСУ, переводится другим множителем.
+            //
+            // У нас такое поле делит тягу на массу шара, и масса эта уже
+            // уменьшена в тридцать раз против исходной. Умножать при этом на
+            // полный множитель значит прикладывать его дважды: ускорение
+            // выходит в тридцать раз сильнее, чем в исходнике.
+            //
+            // Разница не отвлечённая. В `VolcanicPercolatorDaySpa` струя
+            // гейзера должна еле замедлять падение (сила 5 на массу 30 — это
+            // тридцатая доля тяготения), а у нас швыряла постройку на полтысячи
+            // пикселей за секунду, и та влетала в отцепляющие шестерни.
+            //
+            // Поле, которое веса не замечает (`antigrav="true"`), — это сразу
+            // ускорение, и ему нужен прежний множитель.
+            $byMass = ($a['antigrav'] ?? '') !== 'true';
+            $k = $byMass ? self::G * WogBallKind::MASS : self::G;
+
             $this->entities[] = ['id' => $this->id('ff'), 'type' => 'field', 'data' => [
                 'x' => $cx, 'y' => $cy, 'w' => $w0, 'h' => $h0,
-                'ax' => self::fixed($fx * self::G, 1),
-                'ay' => self::fixed(-$fy * self::G, 1),
+                'ax' => self::fixed($fx * $k, 1),
+                'ay' => self::fixed(-$fy * $k, 1),
                 // antigrav there means "pays no attention to weight", that is,
                 // an acceleration. Without it this is a force, and heavy things
                 // resist it more.
-                'byMass' => ($a['antigrav'] ?? '') !== 'true',
+                'byMass' => $byMass,
                 'damping' => $this->num($a, 'dampeningfactor', 0),
                 // Оставленное про запас поле переносится выключенным, а не
                 // выбрасывается: автор увидит его в редакторе там, где оно
@@ -1285,36 +1439,24 @@ final class WogLevel
             $this->entities[$at['at']]['parent'] = $axle;
         }
 
-        // Радиальное поле — это наш источник притяжения.
+        // Радиальное поле — это наш источник притяжения, взятый изнутри.
         //
-        // Отличие не в единицах, а в том, чем описана сила. У нас она задана в
-        // одной точке — на поверхности тела — и дальше падает по закону. В
-        // исходнике задана в двух: в середине и на краю, между ними линейно.
+        // В исходнике сила задана в двух точках: в середине и на краю, между
+        // ними линейно. Ровно это и есть внутренность нашего источника: тело
+        // размером с поле, `core` в середине, `pull` на поверхности. Оба числа
+        // переносятся как есть, и все четыре поля набора сходятся точно.
         //
-        // Но линейный рост от нуля у нас уже есть: ВНУТРИ тела сила растёт от
-        // нуля в середине до `pull` на поверхности, как настоящая гравитация
-        // внутри однородного шара. Значит поле вида «ноль в середине, столько-
-        // то на краю» — это буквально внутренность источника, у которого тело
-        // размером с поле. Ровно так устроены три поля из четырёх в наборе.
-        //
-        // Падающее наружу поле ложится хуже: у нас сила в самой середине всегда
-        // ноль, а в исходнике там может стоять что угодно. Берём тело вдвое
-        // меньше и плоский закон — на краю сходится точно, в середине нет, и об
-        // этом сказано.
+        // Раньше середины у источника не было — сила в ней всегда была нулевой,
+        // как у однородного тела, — и падающее наружу поле приходилось
+        // подделывать вдвое меньшим телом. Совпадала одна точка из всех: в
+        // `GraphicProcessingUnit` у самой середины и у края силы не было вовсе,
+        // а на половине радиуса она была вдвое больше положенной.
         foreach (WogFile::kids($this->scene, 'radialforcefield') as $f) {
             $a = $f['attrs'];
             [$cx, $cy] = $this->pair($a, 'center');
             $span = $this->num($a, 'radius', 100);
             $mid = $this->num($a, 'forceatcenter', 0) * self::G;
             $rim = $this->num($a, 'forceatedge', 0) * self::G;
-            $rising = abs($mid) <= abs($rim);
-
-            if (!$rising) {
-                $this->say('радиальное поле убывает наружу — в середине сила будет нулевой');
-            }
-
-            $body = $rising || $mid === 0.0 ? $span : $span * abs($rim / $mid);
-
             if ($this->num($a, 'dampeningfactor', 0) > 0) {
                 $this->say('сопротивление внутри радиального поля');
             }
@@ -1322,9 +1464,12 @@ final class WogLevel
             $this->entities[] = ['id' => $this->id('gw'), 'type' => 'gravity-well', 'data' => [
                 'x' => WogGeometry::fixed($this->x($cx), 2),
                 'y' => WogGeometry::fixed($this->y($cy), 2),
-                'pull' => WogGeometry::fixed($rising ? $rim : $mid, 1),
-                'radius' => WogGeometry::fixed(max(1, $body), 2),
-                'falloff' => $rising ? 2 : 1,
+                'pull' => WogGeometry::fixed($rim, 1),
+                'core' => WogGeometry::fixed($mid, 1),
+                'radius' => WogGeometry::fixed(max(1, $span), 2),
+                // Снаружи поля нет вовсе — дальность равна телу, — так что
+                // закон убывания ни на что не влияет; оставлен обычный.
+                'falloff' => 2,
                 // Круглый: в исходнике радиальное поле только такое. Овальный
                 // источник — наша возможность, а не перенос.
                 'len' => 0.0, 'tilt' => 0.0,
@@ -1432,11 +1577,60 @@ final class WogLevel
         // если мы уже поставили то, что засчитывает шаг.
         //
         // В `MOM` это кнопка: строишь башню, дотягиваешься, щёлкаешь по иконке.
-        // В `Deliverance` — нет: там надо довезти таблетку донизу, а где именно
-        // низ корзины, в данных не написано, и ставить замок на глаз значило бы
-        // переделать чужой уровень, а не перенести.
+        //
+        // В `Deliverance` конец наступает, когда таблетку довозят донизу и её
+        // разбивает лопающая поверхность. Сообщения в данных нет, но есть обе
+        // его половины: шар с начинкой и поверхность с тегом `ballbuster`. Раз
+        // таких шара и поверхности в уровне ровно по одному, связать их не
+        // домысел, а прочтение — другого повода поднять сообщение в уровне нет.
+        //
+        // Поэтому шаг к цели засчитывается прямо на разбивании: отдельного
+        // «уровень кончился» в движке нет и не нужно, цель считается шагами.
+        // Если поводов больше одного, связывать наугад нельзя — тогда честнее
+        // сказать, что не перенесено.
+        //
+        // Лопающихся шаров в уровне бывает много: в `Deliverance` кроме
+        // таблетки лопаются сорок пять `Bit`. Отличает её то, что с ней вообще
+        // ничего нельзя сделать — ни взять в руку, ни засосать в трубу, ни
+        // прицепить к конструкции. Такой шар не средство, а груз: единственное,
+        // что с ним может случиться, — доехать вниз и разбиться.
         if (WogFile::kids($this->level, 'endonmessage') !== [] && $this->goalFromLocks === 0) {
-            $this->say('конец по сообщению — кончить уровень нечем');
+            $pills = [];
+
+            foreach ($this->entities as $i => $e) {
+                if ($e['type'] !== 'game-ball') {
+                    continue;
+                }
+
+                $kind = $this->kinds[$this->kindOf[$e['id']] ?? ''] ?? null;
+
+                if ($kind === null || !($kind['poppable'] ?? false)) {
+                    continue;
+                }
+
+                $carried = !($kind['draggable'] ?? true)
+                    && !($e['data']['suckable'] ?? $kind['suckable'] ?? true)
+                    && ($kind['maxLinks'] ?? 0) === 0;
+
+                if ($carried) {
+                    $pills[] = $i;
+                }
+            }
+
+            $bursting = 0;
+
+            foreach ($this->entities as $e) {
+                if (in_array($e['type'], ['terrain', 'object'], true) && ($e['data']['bursting'] ?? false)) {
+                    $bursting++;
+                }
+            }
+
+            if (count($pills) === 1 && $bursting === 1) {
+                $this->entities[$pills[0]]['data']['popCounts'] = true;
+                $this->goalFromLocks++;
+            } else {
+                $this->say('конец по сообщению — кончить уровень нечем');
+            }
         }
     }
 
@@ -1583,9 +1777,19 @@ final class WogLevel
                     // с двумя трубами и разным отбором; таких в наборе нет ни
                     // одного, а если появится — тогда и понадобится второе
                     // поле, названное по своему поводу.
-                    + ($this->takes === null || isset($this->takes[$type]) ? [] : ['suckable' => false]),
+                    + ($this->takes === null || isset($this->takes[$type]) ? [] : ['suckable' => false])
+                    // Поворот — свойство размещения, как и место: в
+                    // `RoadBlocks` одни и те же бруски лежат под разными
+                    // углами. Градусы, как и в исходнике, но знак обратный:
+                    // ось Y у нас смотрит вниз.
+                    + ((float) ($b['attrs']['angle'] ?? 0) !== 0.0
+                        ? ['angle' => self::fixed(-$this->num($b['attrs'], 'angle', 0), 2)]
+                        : []),
             ];
 
+            // Какого вида это размещение. Нужно условиям конца уровня: они
+            // разбираются позже, когда у сущности остался только ассет.
+            $this->kindOf[$own['id']] = $type;
             $this->entities[] = $own;
             $byWogId[$b['attrs']['id'] ?? ''] = count($this->entities) - 1;
 
@@ -1884,7 +2088,10 @@ final class WogLevel
         return [
             'x' => $x, 'y' => $y, 'w' => $w, 'h' => $h,
             'rot' => $rot, 'opacity' => $opacity, 'depth' => $depth,
-            'src' => $src, 'fit' => 'none', 'tint' => $tint,
+            // Список источников остаётся пустым: выбирать не из чего. Заводится
+            // он у следа гибели, где пятен несколько, — а украшение уровня
+            // всегда одно и то же.
+            'src' => $src, 'srcs' => [], 'fit' => 'none', 'tint' => $tint,
             'tileW' => $tileW, 'tileH' => $tileH,
             'flipX' => false, 'flipY' => false,
             'anim' => [], 'animDur' => 0, 'animLoop' => true,

@@ -33,6 +33,7 @@ final readonly class SaveChapterMap
      *     id?: string,
      *     next?: list<string>,
      *     name?: string,
+     *     note?: string,
      *     image?: string,
      *     outro?: string,
      * }> $nodes

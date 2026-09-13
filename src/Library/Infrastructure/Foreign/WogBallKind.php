@@ -50,6 +50,22 @@ final class WogBallKind
     private const FORCE = 1400 / 500;
     private const SPRING = 1600 / 9;
     private const BREAK = 26000 / 600;
+    /**
+     * Запуск Bit и Pilot.
+     *
+     * В описании формата `fling="{длина стрелки},{множитель силы}"`, и у обоих
+     * стоит `200,2.5`; там же сказано, что множитель считает силу, поэтому
+     * лёгкий шар улетает дальше тяжёлого. Значит скорость — это оттяжка,
+     * умноженная на множитель и делённая на массу; неизвестен один общий
+     * множитель, и его в описании нет.
+     *
+     * Взят по уровню `HelloWorld` — первому, где игрок вообще запускает шар.
+     * Перелёт с левого островка на правый там около 500 px, при нашей тяжести
+     * это примерно 950 px/с под 45°. Отсюда 1.9: полная оттяжка в 200 при
+     * множителе 2.5 даёт ровно эти 950 шару обычной массы. Замер на месте:
+     * такой запуск уносит шар на 580 px, то есть с запасом.
+     */
+    private const FLING = 1.9;
 
     /**
      * The original has thirteen states; we have twelve poses.
@@ -140,8 +156,13 @@ final class WogBallKind
             'anchorable' => !self::flag($a, 'grumpy'),
             'static' => self::flag($a, 'static'),
             'asleep' => false,
+            // `strands` — сколько связей шар пробует построить; при нуле он в
+            // постройку не встаёт вовсе, при одном встаёт на одну, при двух и
+            // больше — только если нашлось две. Раньше верхний предел
+            // поднимался до единицы, и Beauty, блоки и таблетки прицеплялись
+            // одной связью.
             'minLinks' => min(2, (int) self::num($a, 'strands', 2)),
-            'maxLinks' => max(1, (int) self::num($a, 'strands', 2)),
+            'maxLinks' => max(0, (int) self::num($a, 'strands', 2)),
             'links' => [],
             // Reach comes from maxlen2, not maxlen1: the documentation is
             // explicit that maxlen1 is the limit between two balls already
@@ -155,7 +176,24 @@ final class WogBallKind
             'linkSpring' => $strand !== null
                 ? min(6000, max(100, round(self::num($strand['attrs'], 'springconstmax', 9) * self::SPRING)))
                 : 1600,
-            'linkRest' => $strand !== null ? self::num($strand['attrs'], 'minlen', 0) : 0,
+            // Длина покоя — между двумя числами, а не одно. Раньше сюда шёл
+            // `minlen` как единственная длина, и любая связь игрока стягивалась
+            // ровно к нему: в сто пикселей у обычного шара, построй его хоть
+            // на ста сорока. По описанию формата `minlen` — нижний предел
+            // («короче — растягивается»), а стягивается связь к `shrinklen`,
+            // у которого есть умолчание: 140. Ниже `minlen` она при этом не
+            // уходит.
+            'linkMin' => $strand !== null ? self::num($strand['attrs'], 'minlen', 0) : 0.0,
+            'linkMax' => $strand !== null
+                ? max(self::num($strand['attrs'], 'minlen', 0), self::num($strand['attrs'], 'shrinklen', 140))
+                : 0.0,
+            // Жёсткость связи на всю дальность — из `springconstmin`. В наборе
+            // она отличается от ближней у одного вида из сорока девяти
+            // (`SimCommon`), у остальных обе совпадают, и прямая вырождается
+            // в постоянную.
+            'linkSpringFar' => $strand !== null
+                ? min(6000, max(100, round(self::num($strand['attrs'], 'springconstmin', self::num($strand['attrs'], 'springconstmax', 9)) * self::SPRING)))
+                : 1600,
             // dampfac carries straight across, because both sides now mean the
             // same thing by it: a fraction of critical damping.
             //
@@ -188,10 +226,39 @@ final class WogBallKind
             'bounce' => $m['restitution'],
             'linkWidth' => 0.6,
             'burnTime' => self::num($a, 'burntime', 0),
+            // По описанию формата связь без `fireparticles` не горит вовсе —
+            // это не украшение, а условие.
             'fireLinks' => $strand !== null && isset($strand['attrs']['fireparticles']),
+            'fireDelay' => $strand !== null ? self::num($strand['attrs'], 'ignitedelay', 0) : 0.0,
+            // Скорость пламени по связи. В исходнике счёт идёт на такт, а такт
+            // там 1/50 — тем же множителем пересчитаны скорость лазания,
+            // ходьбы и собственное вращение тел. В наборе стоит 2 и 3, то есть
+            // 100 и 150 px/с: связь длиной 140 px прогорает за полторы секунды
+            // и за секунду. Это похоже на то, что видно в прохождениях.
+            //
+            // Названо в описании просто «скоростью, с которой связь горит по
+            // своей длине», без единиц. Если считать не такты, а доли длины в
+            // секунду, выйдет вдвое-втрое быстрее — полсекунды на связь. Обе
+            // величины одного порядка, и различить их можно только замером по
+            // записи прохождения; взят такт, потому что в этом же формате все
+            // остальные скорости заданы на такт.
+            'fireSpeed' => $strand !== null ? round(self::num($strand['attrs'], 'burnspeed', 0) * 50, 1) : 0.0,
             'blastRadius' => self::num($a, 'detonateradius', 0),
             'blastForce' => self::num($a, 'detonateforce', 0),
             'fireColor' => '#ff9a3c',
+            // След гибели — не поле шара, а картинка, которую он оставляет,
+            // погибнув. Здесь она только находится; кладёт её рядом с шаром
+            // тот, кто собирает ассет, и в самих полях шара её не остаётся.
+            // Пятна следа: в наборе их бывает несколько, и игра берёт случайное.
+            // Первое — то, что видно в редакторе; остальные достаются игре.
+            'splatImages' => array_values(array_filter(array_map(
+                static fn (string $one): string => $picture(trim($one))['src'],
+                explode(',', WogFile::kids($def, 'splat')[0]['attrs']['image'] ?? ''),
+            ))),
+            // Имена вспышек: одна при лопании, другая при взрыве. Как и след,
+            // в полях шара они не остаются — их забирает сборка ассета.
+            'popFx' => trim($a['popparticles'] ?? ''),
+            'blastFx' => trim($a['explosionparticles'] ?? ''),
             'wakeDist' => self::num($a, 'wakedist', 0),
             'color' => '#e2704a',
             'linkColor' => '#f0b48c',
@@ -229,6 +296,9 @@ final class WogBallKind
             // Понадобится — ключ проставит тот, кто ставит замок, и ровно тем
             // шарам, которых замок ждёт.
             'key' => '',
+            // Свойство размещения, а не вида: шаг к цели засчитывает ОДНА
+            // таблетка в `Deliverance`, а не всякая таблетка вообще.
+            'popCounts' => false,
             // Можно ли цепляться к нему, пока он прилип. В наборе разведено
             // ровно по смыслу: у липких якорей разрешено — они и держатся за
             // стену затем, чтобы к ним цеплялись, — а у липких бомб и колючек
@@ -236,6 +306,82 @@ final class WogBallKind
             // который не сказано ничего, ведёт себя как раньше.
             'anchorableStuck' => ($a['stuckattachment'] ?? 'true') !== 'false',
             'suckable' => self::flag($a, 'suckable', true),
+            // Рука игрока. Вынуть из постройки можно только вид, у которого
+            // есть `detachstrand`: описание формата называет этот тег
+            // обязательным для вынимания, и `maxlen` в нём — то, насколько
+            // шар надо оттянуть, прежде чем он выйдет. У обычного шара
+            // `detachable="false"`, то есть построенное стоит.
+            'draggable' => self::flag($a, 'draggable', true),
+            // Вес в руке. У глыбы он вшестеро меньше её собственного, у окна
+            // втрое: рука тянет шар пружиной, и без облегчения тяжёлое
+            // волочилось бы за курсором, не поспевая.
+            'dragMass' => round(self::num($a, 'dragmass', 0) * self::MASS, 3),
+            'detachable' => self::flag($a, 'detachable', true) && WogFile::kids($def, 'detachstrand') !== [],
+            'detachDist' => self::num((WogFile::kids($def, 'detachstrand')[0] ?? ['attrs' => []])['attrs'], 'maxlen', 0),
+            'climber' => self::flag($a, 'climber', true),
+            // Моргание задано одним цветом — каким видно закрытый глаз. Стоит
+            // у девятнадцати видов, то есть почти у всех, кто с глазами.
+            'blinkColor' => isset($a['blinkcolor']) ? self::colour($a['blinkcolor']) : '',
+            // Метка под рукой: своя для «возьму» и своя для «выну». Крутится
+            // она оборотами в секунду, и знак говорит, в какую сторону.
+            // Предел скорости стоит у балуна, рыбы, кости, Pokey и EvilEye —
+            // у тех, кого носят и роняют. Самоцепляние — только у Pilot,
+            // которого запускают, и он пристаёт к тому, во что попал.
+            'attachSpeed' => self::num($a, 'maxattachspeed', 0),
+            'autoAttach' => self::flag($a, 'autoattach'),
+            'behindLinks' => self::flag($a, 'isbehindstrands'),
+            'markerDrag' => $picture(self::first(WogFile::kids($def, 'marker')[0]['attrs']['drag'] ?? ''))['src'],
+            'markerDetach' => $picture(self::first(WogFile::kids($def, 'marker')[0]['attrs']['detach'] ?? ''))['src'],
+            'markerSpin' => self::num(WogFile::kids($def, 'marker')[0]['attrs'] ?? [], 'rotspeed', 0),
+            'eyesFollowPointer' => self::flag($a, 'alwayslookatmouse'),
+            // Спящий держится на месте весь: замер там, где его поставили.
+            //
+            // Так помечены пять видов, и трое из них — балун, рыба, кость —
+            // сами по себе не лежат: у первых двух подъёмная сила. По замеру на
+            // наборе без этого признака уезжали с места, не просыпаясь, 113
+            // спящих шаров из 142, и самый резвый уплывал на тысячу пикселей —
+            // гроздь спящих балунов в `WeatherVane` тихо поднималась к потолку
+            // ещё до первого хода игрока.
+            // Спящий держится на месте ВСЕГДА, а не только с признаком.
+            //
+            // Признак `staticwhensleeping` стоит у пяти видов, и сперва я брал
+            // держание только от него. Опровергает это сам набор: в
+            // `BulletinBoardSystem` вся левая постройка — двадцать два спящих
+            // `Pixel`, у которого признака нет, и висит она в боковом
+            // тяготении без единой опоры. Падай спящие там — уровень был бы
+            // сломан ещё до первого хода игрока.
+            //
+            // Значит спящий в исходнике не движется сам по себе, а признак
+            // говорит о чём-то более узком. Что именно он добавляет, из данных
+            // не видно, и пока он не различается: держатся все спящие.
+            'sleepHold' => 'place',
+            'wakeJump' => self::flag($a, 'jumponwakeup'),
+            // Разброс скорости — доля, на которую темп шара отличается от
+            // объявленного. В исходнике это `speedvariance` с тем же смыслом и
+            // в тех же долях: 0 — все идут одинаково, 1 — кто-то стоит, а
+            // кто-то вдвое быстрее. Пересчитывать нечего.
+            'speedSpread' => min(1, max(0, self::num($a, 'speedvariance', 0))),
+            // Два признака про то, как шары толкаются друг с другом, и они
+            // разные. `collidewithattached` — толкаюсь с теми, кто в
+            // конструкции, чем бы ни был занят сам: так сделаны глыбы и
+            // Beauty. `collideattached` — толкаюсь с ними, только пока сам
+            // стою в конструкции: так сделаны балуны и Pilot, которые
+            // распирают соседей, но сквозь чужую постройку пролетают.
+            // Блоки и окна: лежат стопкой, замирают, берутся за точку щелчка.
+            // Без этих трёх глыбы в `RoadBlocks` и `GracefulFailure`
+            // проваливались бы друг сквозь друга и медленно расползались.
+            //
+            // У `stacking` в описании есть и вторая половина: такой шар,
+            // погибая, разлетается осколками, как геометрия. Она не перенесена
+            // — это про смерть и вид, а не про то, как он лежит.
+            // Запуск из руки: длина стрелки и толчок при полной оттяжке.
+            ...self::fling($a),
+            'stacks' => self::flag($a, 'stacking'),
+            'freezeWhenStill' => self::flag($a, 'autodisable'),
+            'hingeDrag' => self::flag($a, 'hingedrag'),
+            'hitsBuilt' => self::flag($a, 'collidewithattached'),
+            'builtHitsBuilt' => self::flag($a, 'collideattached'),
+            'angle' => 0.0,
         ];
     }
 
@@ -547,6 +693,56 @@ final class WogBallKind
     private static function num(array $a, string $key, float $default = 0): float
     {
         return isset($a[$key]) && $a[$key] !== '' && is_numeric($a[$key]) ? (float) $a[$key] : $default;
+    }
+
+    /** @param array<string, string> $a */
+    /**
+     * @param array<string, string> $a
+     *
+     * @return array{flingRange: float, flingPush: float}
+     */
+    private static function fling(array $a): array
+    {
+        $parts = array_map('trim', explode(',', $a['fling'] ?? ''));
+
+        if (count($parts) !== 2 || !is_numeric($parts[0]) || !is_numeric($parts[1])) {
+            return ['flingRange' => 0.0, 'flingPush' => 0.0];
+        }
+
+        $arrow = (float) $parts[0];
+        $mult = (float) $parts[1];
+
+        return [
+            'flingRange' => round($arrow, 1),
+            'flingPush' => round($arrow * $mult * self::FLING, 1),
+        ];
+    }
+
+    /**
+     * Цвет из чужой записи: три числа от нуля до 255 через запятую.
+     *
+     * Пустая строка, если записано не то: пропущенный цвет лучше выдуманного —
+     * шар просто не будет моргать, а не станет моргать чем попало.
+     */
+    private static function colour(string $said): string
+    {
+        $parts = array_map('trim', explode(',', $said));
+
+        if (count($parts) !== 3) {
+            return '';
+        }
+
+        $hex = '#';
+
+        foreach ($parts as $one) {
+            if (!is_numeric($one)) {
+                return '';
+            }
+
+            $hex .= sprintf('%02x', max(0, min(255, (int) $one)));
+        }
+
+        return $hex;
     }
 
     /** @param array<string, string> $a */

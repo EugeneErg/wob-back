@@ -72,6 +72,7 @@ final class StoryMapper
                 (float) $n->y,
                 array_map(static fn (string $c): NodeId => new NodeId($c), $n->next ?? []),
                 (string) ($n->name ?? ''),
+                (string) ($n->note ?? ''),
                 (string) ($n->image ?? ''),
                 (string) ($n->outro ?? ''),
             ),
@@ -144,6 +145,10 @@ final class StoryMapper
 
             if ($n->name !== '') {
                 $out->name = $n->name;
+            }
+
+            if ($n->note !== '') {
+                $out->note = $n->note;
             }
 
             if ($n->image !== '') {

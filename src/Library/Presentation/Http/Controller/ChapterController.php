@@ -61,6 +61,7 @@ final readonly class ChapterController
             "x" => ["nullable", "numeric", "between:0,100"],
             "y" => ["nullable", "numeric", "between:0,100"],
             "name" => ["nullable", "string", "max:200"],
+            "note" => ["nullable", "string", "max:400"],
             "image" => ["nullable", "string", "max:2000"],
             "outro" => ["nullable", "string", "max:2000"],
         ]);
@@ -73,6 +74,7 @@ final readonly class ChapterController
             isset($data["x"]) ? (float) $data["x"] : null,
             isset($data["y"]) ? (float) $data["y"] : null,
             $data["name"] ?? null,
+            $data["note"] ?? null,
             $data["image"] ?? null,
             $data["outro"] ?? null,
         ));
@@ -135,6 +137,7 @@ final readonly class ChapterController
             "nodes.*.id" => ["nullable", "string", "max:64"],
             "nodes.*.levelId" => ["required", "string", "max:64"],
             "nodes.*.name" => ["nullable", "string", "max:200"],
+            "nodes.*.note" => ["nullable", "string", "max:400"],
             "nodes.*.image" => ["nullable", "string", "max:2000"],
             "nodes.*.outro" => ["nullable", "string", "max:2000"],
             "nodes.*.x" => ["required", "numeric", "between:0,100"],

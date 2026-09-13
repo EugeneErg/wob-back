@@ -26,6 +26,7 @@ final readonly class EditMap
         public ?float $x = null,
         public ?float $y = null,
         public ?string $name = null,
+        public ?string $note = null,
         public ?string $image = null,
         public ?string $outro = null,
         public ?string $from = null,
@@ -53,10 +54,11 @@ final readonly class EditMap
         ?float $x,
         ?float $y,
         ?string $name,
+        ?string $note,
         ?string $image,
         ?string $outro,
     ): self {
-        return new self($ownerId, $storyId, "node", $chapterId, $nodeId, $x, $y, $name, $image, $outro);
+        return new self($ownerId, $storyId, "node", $chapterId, $nodeId, $x, $y, $name, $note, $image, $outro);
     }
 
     public static function link(string $ownerId, string $storyId, string $from, string $to, bool $linked): self

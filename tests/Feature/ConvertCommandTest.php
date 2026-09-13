@@ -77,6 +77,72 @@ final class ConvertCommandTest extends TestCase
         }
     }
 
+    /**
+     * Geometry says whether it is solid, whether bodies pass through it, and
+     * whether a strand may be built across it — three things the converter
+     * used to drop without a word.
+     *
+     * HelloWorld has strandgeom="false": building through its walls is allowed,
+     * so no solid piece of it may block a link.
+     */
+    public function testGeometryCarriesSolidityAndWhetherLinksPassThrough(): void
+    {
+        $out = $this->tempFile();
+        $this->artisan('wob:convert', ['source' => self::ROOT, '--out' => $out, '--quiet-report' => true]);
+
+        $bundle = json_decode((string) file_get_contents($out), true);
+        $pieces = array_values(array_filter(
+            $bundle['levels'][0]['entities'],
+            static fn (array $e): bool => in_array($e['type'], ['terrain', 'object'], true),
+        ));
+
+        self::assertNotEmpty($pieces);
+
+        foreach ($pieces as $piece) {
+            self::assertIsBool($piece['data']['solid']);
+            self::assertIsBool($piece['data']['touchesBodies']);
+            self::assertFalse($piece['data']['blocksLinks']);
+        }
+    }
+
+    /**
+     * A level that ends on a scripted message ends, for us, when the thing the
+     * player had to deliver is broken.
+     */
+    public function testEndingOnAMessageBecomesAStepForBreakingTheCargo(): void
+    {
+        $out = $this->tempFile();
+        $this->artisan('wob:convert', ['source' => self::ROOT, '--out' => $out, '--quiet-report' => true]);
+
+        $bundle = json_decode((string) file_get_contents($out), true);
+        $level = $bundle['levels'][0];
+
+        // HelloWorld ends at the pipe, so nothing here may be flagged as cargo.
+        foreach ($level['entities'] as $entity) {
+            if ($entity['type'] === 'game-ball') {
+                self::assertArrayNotHasKey('popCounts', $entity['data']);
+            }
+        }
+    }
+
+    /**
+     * A map point is named by the set's text table, not by its folder.
+     */
+    public function testAMapPointIsNamedByTheTextTable(): void
+    {
+        $out = $this->tempFile();
+        $this->artisan('wob:convert', ['source' => self::ROOT, '--out' => $out, '--quiet-report' => true]);
+
+        $bundle = json_decode((string) file_get_contents($out), true);
+        $node = $bundle['chapters'][0]['nodes'][0];
+
+        // This set has no islands, so there is no text table entry to name the
+        // point by, and the fallback chapter leaves it blank rather than
+        // showing the folder name.
+        self::assertSame('wog-helloworld', $node['levelId']);
+        self::assertSame('', $node['name']);
+    }
+
     public function testWhatDidNotComeAcrossIsPrintedByDefault(): void
     {
         // A converter that reports only success teaches you to trust it, and

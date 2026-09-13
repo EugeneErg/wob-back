@@ -97,6 +97,7 @@ final class ClientFlowTest extends TestCase
         // 7. Точку подписали. describeNode()
         $this->patchJson("/api/stories/{$storyId}/chapters/{$chapterOne}/nodes/{$first['nodeId']}", [
             'name' => 'Первое место',
+            'note' => 'с него всё началось',
             'image' => '#123',
             'outro' => '',
         ])->assertOk();

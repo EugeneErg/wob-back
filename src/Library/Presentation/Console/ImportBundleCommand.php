@@ -125,7 +125,10 @@ final class ImportBundleCommand extends Command
                 continue;
             }
 
-            $full = $root . '/' . $path;
+            // Свой, а не чужой файл. Заставка собирается конвертером и лежит
+            // там, куда он её положил, — под корнем набора ей взяться неоткуда,
+            // поэтому путь к ней полный.
+            $full = str_starts_with($path, '/') ? $path : $root . '/' . $path;
 
             if (!is_file($full)) {
                 $absent[] = $path;

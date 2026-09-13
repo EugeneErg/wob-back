@@ -9,6 +9,7 @@ use Wob\Library\Infrastructure\Foreign\WogBallKind;
 use Wob\Library\Infrastructure\Foreign\WogFile;
 use Wob\Library\Infrastructure\Foreign\WogGeometry;
 use Wob\Library\Infrastructure\Foreign\WogLevel;
+use Wob\Library\Infrastructure\Foreign\WogMovie;
 use Wob\Library\Infrastructure\Foreign\WogTables;
 
 /**
@@ -32,6 +33,7 @@ final class ConvertWogCommand extends Command
         {--out=bundle.json : where to write the bundle}
         {--media= : also write the list of files to upload}
         {--fields= : also write which fields it fills, for the client to check against}
+        {--films= : where to put the cutscenes it builds (next to the bundle by default)}
         {--quiet-report : do not print what did not come across}';
 
     protected $description = 'Convert a folder of original game files into a wob bundle';
@@ -43,9 +45,60 @@ final class ConvertWogCommand extends Command
     private array $skipped = [];
 
     /**
-     * Острова: название и уровни с зависимостями. Главами станут они.
+     * Заставки набора, собранные в наши файлы.
      *
-     * @var list<array{title: string, levels: list<array{id: string, depends: string}>}>
+     * Кладутся рядом с пакетом, а не под чужой папкой: это наш файл, а не их.
+     * Собираются все, какие есть, — какая из них кому достанется, решают уже
+     * острова.
+     *
+     * @param array<string, string> $images
+     * @param array<string, string> $strings
+     *
+     * @return array<string, string>
+     */
+    private function makeFilms(string $root, array $images, array $strings): array
+    {
+        $into = rtrim((string) ($this->option('films') ?: dirname((string) $this->option('out')) . '/films'), '/');
+        $out = [];
+
+        foreach (glob($root . '/movie/*/*.movie.binltl') ?: [] as $file) {
+            $name = basename($file, '.movie.binltl');
+            $film = WogMovie::toSvg($file, $root, $images, $strings);
+
+            if ($film === null) {
+                $this->missed['(набор)']['заставка не читается'] ??= 0;
+                $this->missed['(набор)']['заставка не читается']++;
+
+                continue;
+            }
+
+            if (!is_dir($into) && !mkdir($into, 0o777, true) && !is_dir($into)) {
+                return [];
+            }
+
+            $path = $into . '/' . $name . '.svg';
+            file_put_contents($path, $film);
+            $out[$name] = $path;
+        }
+
+        return $out;
+    }
+
+    /** Средний из трёх: чем закрыть, ЧТО ПОКАЗАТЬ, чем открыть. */
+    private static function filmOf(string $cutscene): string
+    {
+        $parts = array_map('trim', explode(',', $cutscene));
+
+        return count($parts) === 3 ? $parts[1] : '';
+    }
+
+    /**
+     * Острова набора: название и уровни в порядке зависимостей.
+     *
+     * @var list<array{title: string, levels: list<array{
+     *     id: string, depends: string, name: string,
+     *     text: string, cutscene: string, oncomplete: string,
+     * }>}>
      */
     private array $islands = [];
 
@@ -58,6 +111,43 @@ final class ConvertWogCommand extends Command
      * @var array<string, array{by: string, value: float, required: bool}|null>
      */
     private array $mark = [];
+
+    /**
+     * Таблица текстов набора. Читается раньше островов, потому что название
+     * уровня лежит в ней, а в острове стоит только ключ.
+     *
+     * @var array<string, string>
+     */
+    private array $strings = [];
+
+    /**
+     * Заставки, собранные из чужих фильмов: имя фильма → путь к нашему файлу.
+     *
+     * @var array<string, string>
+     */
+    private array $films = [];
+
+    /** Корень чужого набора. Нужен разделам, которые идут после чтения файлов. */
+    private string $root = '';
+
+    /**
+     * Картинки следов гибели и частиц у шаров. Собираются при сборке ассетов, а список файлов к
+     * заливке пишется раньше — поэтому лежат здесь, а не в местной переменной.
+     *
+     * @var array<string, string>
+     */
+    private array $marks = [];
+
+    /**
+     * Таблицы набора, нужные при сборке ассетов: лопающийся шар и бомба носят
+     * свою вспышку с собой, а собирается ассет позже, чем читаются файлы.
+     *
+     * @var array<string, string>
+     */
+    private array $images = [];
+
+    /** @var array<string, array<string, mixed>> */
+    private array $fx = [];
 
     public function handle(): int
     {
@@ -72,7 +162,11 @@ final class ConvertWogCommand extends Command
         $res = WogTables::resources($root);
         $mats = WogTables::materials($root);
         $fx = WogTables::effects($root);
-        $strings = WogTables::strings($root);
+        $strings = $this->strings = WogTables::strings($root);
+        $this->root = $root;
+        $this->images = $res['images'];
+        $this->fx = WogTables::effects($root);
+        $this->films = $this->makeFilms($root, $res['images'], $strings);
         $balls = $this->ballDefinitions($root);
 
         $levels = [];
@@ -133,6 +227,13 @@ final class ConvertWogCommand extends Command
         $mediaOut = (string) $this->option('media');
 
         if ($mediaOut !== '') {
+            // Заставки — тоже файлы к заливке, хоть и собранные нами.
+            foreach ($this->films as $path) {
+                $media[$path] = $path;
+            }
+
+            $media += $this->marks;
+
             file_put_contents($mediaOut, json_encode($media, JSON_UNESCAPED_SLASHES));
             $this->line("список файлов: {$mediaOut}");
         }
@@ -335,7 +436,30 @@ final class ConvertWogCommand extends Command
             $byId[$l['id']] = true;
         }
 
-        foreach ($this->islands as $n => $isle) {
+        // Набор без островов. `levelNames` в этом случае берёт всё, что лежит,
+        // но уровень, не стоящий ни в одной главе, заливка не сохраняет вовсе:
+        // глава — единственное, что держит уровень в истории. Отдать пакет с
+        // уровнями и без глав значило бы молча выбросить всё на заливке.
+        // Поэтому одна глава, цепочкой в том порядке, в каком уровни собраны.
+        $islands = $this->islands;
+
+        if ($islands === [] && $levels !== []) {
+            $chain = [];
+            $prev = '';
+
+            foreach ($levels as $l) {
+                $name = substr((string) $l['id'], strlen('wog-'));
+                $chain[] = [
+                    'id' => $name, 'depends' => $prev,
+                    'name' => '', 'text' => '', 'cutscene' => '', 'oncomplete' => '',
+                ];
+                $prev = $name;
+            }
+
+            $islands = [['title' => 'Всё подряд', 'levels' => $chain]];
+        }
+
+        foreach ($islands as $n => $isle) {
             $mine = array_values(array_filter(
                 $isle['levels'],
                 static fn (array $one): bool => isset($byId['wog-' . mb_strtolower($one['id'])]),
@@ -361,7 +485,60 @@ final class ConvertWogCommand extends Command
                     'x' => 6 + $step * 9,
                     'y' => 10 + $row * 14,
                     'next' => [],
+                    // Название точки на карте. В исходнике оно лежит не в
+                    // острове, а в таблице текстов — в острове только ключ, —
+                    // и без него игрок видел на карте `AB3` и `MOM` вместо
+                    // «Алиса, Боб и третий лишний».
+                    //
+                    // Именно точке, а не уровню: по решению автора один и тот
+                    // же уровень, встреченный дважды, — два разных места в
+                    // истории, и название у каждого своё. Рабочее имя уровня
+                    // при этом остаётся тем, каким названа его папка.
+                    'name' => str_replace("\n", ' ', $this->strings[$one['name']] ?? ''),
+                    // Вторая строка под названием: «проще вареной тянучки».
+                    // В исходнике она такой же ключ таблицы, как и название.
+                    'note' => str_replace("\n", ' ', $this->strings[$one['text']] ?? ''),
+                    // Ролик после победы. В исходнике он записан тройкой
+                    // «чем закрыть, что показать, чем открыть»; показывается
+                    // средний, а створки — устройство чужого перехода.
+                    'outro' => $this->films[self::filmOf($one['cutscene'])] ?? '',
                 ];
+
+                // Что у точки есть в исходнике, а у нас положить некуда.
+                //
+                // Подпись под названием — строка вроде «проще вареной тянучки».
+                // Место для неё на карте не предусмотрено: у точки есть имя и
+                // картинка, а второй строки нет.
+                //
+                // Ролик после уровня у точки как раз есть, но у нас это видео,
+                // а в исходнике — кукольный мультфильм: список картинок со
+                // своими дорожками движения в двоичном файле. Превратить одно в
+                // другое значит его нарисовать и снять, а не перенести.
+                //
+                // Действие по прохождению открывает башню Корпорации, свисток
+                // или продолжение главы. Всё трое — устройство чужого меню, а
+                // меню у нас своё: тропы между точками уже говорят, что за чем
+                // открывается.
+                if ($one['cutscene'] !== '' && ($this->films[self::filmOf($one['cutscene'])] ?? '') === '') {
+                    $this->missed[$one['id']]['ролик после уровня — его не удалось собрать'] = 1;
+                }
+
+                // Реплики и разовые звуки заставки. Файлы лежат рядом с ней, а
+                // вот когда каждый звучит — не написано нигде: это решала сама
+                // игра. Ставить наугад значило бы сочинять, поэтому сказано
+                // вслух.
+                $voices = WogMovie::soundsBesidesMusic(
+                    $this->root . '/movie/' . self::filmOf($one['cutscene']),
+                    self::filmOf($one['cutscene']),
+                );
+
+                if ($voices > 0) {
+                    $this->missed[$one['id']]['звук в заставке — когда он звучит, в наборе не сказано'] = $voices;
+                }
+
+                if ($one['oncomplete'] !== '') {
+                    $this->missed[$one['id']]['действие по прохождению — оно про чужое меню'] = 1;
+                }
             }
 
             // Тропы: от того, от кого зависят, к тому, кто зависит.
@@ -402,7 +579,22 @@ final class ConvertWogCommand extends Command
                 $total += (int) $row['count'];
             }
 
-            if ($total > 0) {
+            // След гибели. Он ложится тем же способом, что и начинка: рождением,
+            // которое выпускает отложенное, когда шар погиб, — и только когда
+            // погиб. Ни трубе, ни улетевшему за край след не полагается, и
+            // рождение это уже знает, так что движку про следы знать нечего.
+            //
+            // В наборе у следа бывает несколько картинок, из которых игра берёт
+            // случайную; мы берём первую — разнообразия меньше, но выдумывать
+            // выбор не из чего.
+            $marks = (array) ($data['splatImages'] ?? []);
+            unset($data['splatImages']);
+            $mark = (string) ($marks[0] ?? '');
+
+            $hasFx = ($this->fx[(string) ($data['popFx'] ?? '')] ?? null) !== null
+                || ($this->fx[(string) ($data['blastFx'] ?? '')] ?? null) !== null;
+
+            if ($total > 0 || $mark !== '' || $hasFx) {
                 $inside[] = [
                     'id' => $id . '-birth', 'type' => 'birth', 'parent' => $id . '-e',
                     'data' => ['x' => 0.0, 'y' => 0.0],
@@ -425,6 +617,66 @@ final class ConvertWogCommand extends Command
                             ],
                         ];
                     }
+                }
+            }
+
+            // Вспышка частиц: у лопающегося своя, у взрывающегося своя. Обе
+            // выпускаются гибелью — тем же рождением, что и начинка со следом,
+            // — и движку про них знать нечего.
+            foreach ([['popFx', 'pop'], ['blastFx', 'blast']] as [$key, $tail]) {
+                $name = (string) ($data[$key] ?? '');
+                unset($data[$key]);
+                $eff = $this->fx[$name] ?? null;
+
+                if ($eff === null) {
+                    continue;
+                }
+
+                $max = (float) ($eff['attrs']['maxparticles'] ?? 10);
+                $rate = (float) ($eff['attrs']['rate'] ?? 0);
+                $k = 0;
+
+                foreach ($eff['parts'] as $part) {
+                    $burst = WogLevel::burst($part["attrs"], $this->images, $this->root, $max, $rate);
+
+                    if ($burst === null) {
+                        continue;
+                    }
+
+                    $inside[] = [
+                        'id' => $id . '-' . $tail . $k++,
+                        'type' => 'sparks',
+                        'parent' => $id . '-birth',
+                        'data' => $burst['data'],
+                    ];
+                    $this->marks += $burst['media'];
+                }
+            }
+
+            if ($mark !== '') {
+                $side = (float) ($data['r'] ?? 13) * 2.4;
+                $inside[] = [
+                    'id' => $id . '-splat',
+                    'type' => 'picture',
+                    'parent' => $id . '-birth',
+                    'data' => [
+                        'x' => -$side / 2, 'y' => -$side / 2,
+                        'w' => WogGeometry::fixed($side, 2),
+                        'h' => WogGeometry::fixed($side, 2),
+                        'rot' => 0.0, 'opacity' => 1.0, 'depth' => -1.0,
+                        'src' => $mark,
+                        // Все пятна, какие есть: какое достанется этому следу,
+                        // решится при его появлении. Сорок одинаковых клякс на
+                        // полу выглядели бы штампом, а не побоищем.
+                        'srcs' => array_values($marks),
+                        'fit' => 'contain', 'tint' => 0.0,
+                        'tileW' => 0.0, 'tileH' => 0.0,
+                        'flipX' => false, 'flipY' => false,
+                        'anim' => [], 'animDur' => 0.0, 'animLoop' => true,
+                    ],
+                ];
+                foreach ($marks as $one) {
+                    $this->marks[$one] = $one;
                 }
             }
 
@@ -507,7 +759,15 @@ final class ConvertWogCommand extends Command
 
                 $named[$id] = true;
                 $this->mark[$id] = self::markOf((string) ($one['attrs']['ocd'] ?? ''));
-                $mine[] = ['id' => $id, 'depends' => (string) ($one['attrs']['depends'] ?? '')];
+                $mine[] = [
+                    'id' => $id,
+                    'depends' => (string) ($one['attrs']['depends'] ?? ''),
+                    // Название — ключ в таблице текстов, а не сам текст.
+                    'name' => (string) ($one['attrs']['name'] ?? ''),
+                    'text' => (string) ($one['attrs']['text'] ?? ''),
+                    'cutscene' => (string) ($one['attrs']['cutscene'] ?? ''),
+                    'oncomplete' => (string) ($one['attrs']['oncomplete'] ?? ''),
+                ];
             }
 
             $this->islands[] = [

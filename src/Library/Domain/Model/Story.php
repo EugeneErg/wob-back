@@ -301,11 +301,12 @@ final class Story extends AggregateRoot
         $chapter->replaceNode($node->movedTo($x, $y));
     }
 
-    /** Что игрок видит в этом месте: имя, картинка, ролик после победы. */
+    /** Что игрок видит в этом месте: имя, подпись, картинка, ролик после победы. */
     public function describeNode(
         ChapterId $chapterId,
         NodeId $nodeId,
         string $name,
+        string $note,
         string $image,
         string $outro,
     ): void {
@@ -314,7 +315,7 @@ final class Story extends AggregateRoot
             sprintf("Chapter %s has no point %s", $chapterId->value, $nodeId->value),
         );
 
-        $chapter->replaceNode($node->describedAs($name, $image, $outro));
+        $chapter->replaceNode($node->describedAs($name, $note, $image, $outro));
     }
 
     /**

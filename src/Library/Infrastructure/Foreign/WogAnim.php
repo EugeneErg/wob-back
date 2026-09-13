@@ -27,9 +27,26 @@ final class WogAnim
     /**
      * @return array{tracks: array<string, list<array{0: float, 1: float}>>, dur: float}
      */
-    public static function read(string $file): array
+    /**
+     * @param bool $keepStill Оставлять ли дорожку, которая никуда не движется.
+     *                         Картинке уровня такая не нужна: это волна без
+     *                         колебания. Актёру заставки нужна, и очень:
+     *                         неподвижная точка — всё равно место, а выброшенная
+     *                         дорожка ставит его в начало координат.
+     * @param int $from С какого места файла читать. Ноль — с начала, как у
+     *                  отдельного файла анимации. У заставки таких заголовков
+     *                  в одном файле столько, сколько в ней актёров, и все
+     *                  смещения внутри каждого отсчитываются от его начала —
+     *                  поэтому хвост файла с нужного места и есть такой файл.
+     */
+    /** @return array{tracks: array<string, list<array{0: float, 1: float}>>, dur: float} */
+    public static function read(string $file, int $from = 0, bool $keepStill = false): array
     {
         $b = (string) file_get_contents($file);
+
+        if ($from > 0) {
+            $b = substr($b, $from);
+        }
         $i32 = static fn (int $o): int => unpack('l', substr($b, $o, 4))[1] ?? 0;
         $f32 = static fn (int $o): float => (float) (unpack('g', substr($b, $o, 4))[1] ?? 0);
 
@@ -126,7 +143,7 @@ final class WogAnim
                 }
             }
 
-            if (count($out[$k]) < 2 || !$moves) {
+            if (!$keepStill && (count($out[$k]) < 2 || !$moves)) {
                 unset($out[$k]);
             }
         }

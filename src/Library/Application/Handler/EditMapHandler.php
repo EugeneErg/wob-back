@@ -61,13 +61,14 @@ final readonly class EditMapHandler
             $story->moveNode($chapterId, $nodeId, $command->x, $command->y);
         }
 
-        if ($command->name !== null || $command->image !== null || $command->outro !== null) {
+        if ($command->name !== null || $command->note !== null || $command->image !== null || $command->outro !== null) {
             $node = $story->chapter($chapterId)->node($nodeId);
 
             $story->describeNode(
                 $chapterId,
                 $nodeId,
                 $command->name ?? $node?->name ?? "",
+                $command->note ?? $node?->note ?? "",
                 $command->image ?? $node?->image ?? "",
                 $command->outro ?? $node?->outro ?? "",
             );
