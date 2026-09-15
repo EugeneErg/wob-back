@@ -134,7 +134,7 @@ final class WogBallKind
             $rel = $images[$id] ?? null;
 
             if ($rel === null) {
-                return ['src' => '', 'aspect' => 1.0];
+                return ['src' => '', 'aspect' => 1.0, 'w' => 0.0];
             }
 
             $size = WogFile::pngSize($root . '/' . $rel . '.png');
@@ -145,6 +145,9 @@ final class WogBallKind
                 // proportions. Without them a 200×50 body is drawn square,
                 // which is a circle where a bar should be.
                 'aspect' => $size !== null && $size['h'] > 0 ? round($size['w'] / $size['h'], 4) : 1.0,
+                // Своя ширина картинки — она нужна, чтобы перевести чужой
+                // `scale` в наш (см. ниже, там же и почему).
+                'w' => (float) ($size['w'] ?? 0),
             ];
         };
 
@@ -420,7 +423,7 @@ final class WogBallKind
      * every variant as its own row, and can edit each.
      *
      * @param array<string, mixed>                            $def
-     * @param callable(string): array{src: string, aspect: float} $picture
+     * @param callable(string): array{src: string, aspect: float, w: float} $picture
      *
      * @return list<array<string, mixed>>
      */
@@ -450,6 +453,10 @@ final class WogBallKind
             $yr = array_map('floatval', self::list($a['yrange'] ?? ''));
             $x = self::middle($a['x'] ?? '0');
             $y = self::middle($a['y'] ?? '0');
+            // Чужой scale — он нужен и частям, и зрачку, поэтому берётся один
+            // раз здесь, а не пересчитывается в каждом поле.
+            $scale = self::num($a, 'scale', 1);
+            $pupil = isset($a['pupil']) ? $picture(self::first($a['pupil'])) : ['src' => '', 'w' => 0.0];
 
             foreach ($names as $id) {
                 $pic = $picture($id);
@@ -462,16 +469,46 @@ final class WogBallKind
                     // between its profiles and its parts have to travel with it.
                     'dx' => round($x / $r, 4),
                     'dy' => round(-$y / $r, 4),
-                    'scale' => self::num($a, 'scale', 1),
+                    // Чужой `scale` умножает СВОЙ размер картинки, наш —
+                    // ширину шара. Величины разные, и пропустить одну за другую
+                    // нельзя: у common тело 64 px при радиусе 15, и доля шара
+                    // выходит 0.55 вместо 1.17 — тело съёживается вдвое. Глаз
+                    // при этом 32 px, и его доля почти совпадает случайно,
+                    // поэтому глаза остаются прежними, а шар оказывается с них
+                    // размером и выглядит прозрачным.
+                    //
+                    // Перевод один на все части: доля шара = своя ширина × scale
+                    // ÷ ширину шара. Ширины нет (картинка не прочлась) — значит
+                    // и переводить не из чего, оставляем как было.
+                    'scale' => round(
+                        $scale * ($pic['w'] > 0 ? $pic['w'] / ($r * 2) : 1.0),
+                        4,
+                    ),
                     'layer' => (int) self::num($a, 'layer', 0),
                     'rotate' => self::flag($a, 'rotate'),
                     'pick' => $group,
-                    'pupil' => isset($a['pupil']) ? $picture(self::first($a['pupil']))['src'] : '',
-                    // pupilinset is the distance from the eye's edge, not the
-                    // pupil's size: too small and the pupil shows outside the
-                    // eye, which is the original's behaviour and not a bug.
-                    'pupilInset' => round(self::num($a, 'pupilinset', 0) / $r, 4),
-                    'pupilSize' => 0.3,
+                    'pupil' => $pupil['src'],
+                    // Зрачок меряется своей картинкой, как и всякая часть, а
+                    // `pupilinset` — натуральными пикселями САМОГО ГЛАЗА, а не
+                    // шара: у common глаз 32 px, отступ 12, и зрачок ходит на
+                    // 4 px от середины. Поделив отступ на радиус шара, мы
+                    // получали 0.8, а дальше 8 − 0.8·15 уходило в минус — и
+                    // зрачок замирал в середине намертво.
+                    //
+                    // Обе величины переводятся одинаково: натуральное число
+                    // умножается на чужой scale и делится на нашу мерку.
+                    // Размер — на ширину шара, отступ — на радиус.
+                    'pupilInset' => round(self::num($a, 'pupilinset', 0) * $scale / $r, 4),
+                    // Размера зрачка в наборе НЕТ вовсе — он берётся из самой
+                    // картинки. Раньше здесь стояло выдуманное 0.3, то есть 9
+                    // px при глазе 16: зрачок занимал больше половины глаза,
+                    // сливался с чёрным телом, и шар читался как «тело
+                    // размером с глаза». По набору он 8 px на 0.5 — вчетверо
+                    // меньше по площади.
+                    'pupilSize' => round(
+                        $pupil['w'] > 0 ? $pupil['w'] * $scale / ($r * 2) : 0.3,
+                        4,
+                    ),
                     // stretch = {speed},{along},{across}, and it is the ball's
                     // MOVEMENT that stretches a part, not the pull on a strand.
                     'speedRef' => $stretch[0] ?? 0.0,

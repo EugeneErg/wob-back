@@ -325,6 +325,7 @@ final class WogMovie
                 self::picture($root, $images[$text($i32($at + 4))] ?? ''),
                 self::line($strings, $text($i32($at + 8))),
                 $anim['tracks'],
+                $anim['blank'],
                 $length,
             );
         }
@@ -348,8 +349,9 @@ final class WogMovie
      * SVG применяет их справа налево, поэтому и записаны они в этом порядке.
      *
      * @param array<string, list<array{0: float, 1: float}>> $tracks
+     * @param list<float>                                    $blank  моменты, в которые актёра нет
      */
-    private static function actor(bool $isImage, string $src, string $label, array $tracks, float $length): string
+    private static function actor(bool $isImage, string $src, string $label, array $tracks, array $blank, float $length): string
     {
         if ($isImage && $src === '') {
             return '';
@@ -372,10 +374,12 @@ final class WogMovie
                 . ' dominant-baseline="middle" font-family="serif">' . self::rows($label) . '</text>';
         }
 
-        $moves = self::pairs($tracks['dx'] ?? [], $tracks['dy'] ?? [], 0.0, 0.0);
-        $scales = self::pairs($tracks['sx'] ?? [], $tracks['sy'] ?? [], 1.0, 1.0);
-        $turns = $tracks['rot'] ?? [];
-        $fades = $tracks['alpha'] ?? [];
+        // Разрез по тем моментам, когда актёра нет: место не переходит через
+        // них плавно. Яркость не режем — она и говорит, что актёра не видно.
+        $moves = self::cut(self::pairs($tracks['dx'] ?? [], $tracks['dy'] ?? [], 0.0, 0.0), $blank);
+        $scales = self::cut(self::pairs($tracks['sx'] ?? [], $tracks['sy'] ?? [], 1.0, 1.0), $blank);
+        $turns = self::cut($tracks['rot'] ?? [], $blank);
+        $fades = self::stay($tracks['alpha'] ?? [], $blank);
 
         $out = '<g>';
 
@@ -448,17 +452,29 @@ final class WogMovie
             $values[] = $value($k);
         }
 
-        // Одна точка — это не движение, а положение: у SVG дорожка из одного
-        // значения не имеет смысла, поэтому она повторяется на конце.
-        if (count($times) === 1) {
-            $times[] = '1';
-            $values[] = $values[0];
+        if ($times === []) {
+            return ' dur="' . self::round($length, 3) . 's" fill="freeze" repeatCount="1"';
         }
 
         // Первый момент обязан быть нулём, последний — единицей, иначе браузер
         // отказывается играть дорожку целиком.
-        $times[0] = '0';
-        $times[count($times) - 1] = '1';
+        //
+        // Но добиваться этого переписыванием краёв нельзя: дорожка, начавшаяся
+        // позже фильма или кончившаяся раньше, от этого растягивается на всю
+        // его длину — и то, что делалось за треть секунды, ползёт пять секунд.
+        // Края надо не двигать, а достраивать: до первого своего кадра актёр
+        // стоит там же, где в первом, после последнего — там же, где в
+        // последнем. Заодно это и есть случай дорожки из одного значения:
+        // одна точка — не движение, а положение.
+        if ($times[0] !== '0') {
+            array_unshift($times, '0');
+            array_unshift($values, $values[0]);
+        }
+
+        if ($times[count($times) - 1] !== '1') {
+            $times[] = '1';
+            $values[] = $values[count($values) - 1];
+        }
 
         return ' dur="' . self::round($length, 3) . 's" fill="freeze" repeatCount="1"'
             . ' keyTimes="' . implode(';', $times) . '"'
@@ -498,6 +514,129 @@ final class WogMovie
                 $xs === [] ? $noX : WogAnim::sample($xs, $t),
                 $ys === [] ? $noY : WogAnim::sample($ys, $t),
             ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Разрез в тех местах, где актёра нет.
+     *
+     * Пропасть между двумя кусками жизни актёра — не путь. Он гаснет в одном
+     * месте и загорается в другом, и между ними не едет: читатель формата уже
+     * выбросил пустые кадры, но дорожка без них тянется из первого места во
+     * второе насквозь, и актёр проползает это расстояние, пока проявляется.
+     * По набору такой переезд — 644 px по середине при ширине экрана 1095.
+     *
+     * Лечится тем, что место меняется РАЗОМ и делает это тогда, когда актёра
+     * не видно: до пропасти держится прежнее, от неё — следующее. Два ключа в
+     * один и тот же миг SVG и читает как мгновенную смену.
+     *
+     * @param list<array<int, float>> $keys
+     * @param list<float>             $blank
+     *
+     * @return list<array<int, float>>
+     */
+    private static function cut(array $keys, array $blank): array
+    {
+        if (count($keys) < 2 || $blank === []) {
+            return $keys;
+        }
+
+        $out = [];
+
+        foreach ($keys as $i => $key) {
+            $out[] = $key;
+            $next = $keys[$i + 1] ?? null;
+
+            if ($next === null) {
+                continue;
+            }
+
+            foreach ($blank as $at) {
+                if ($at <= $key[0] || $at >= $next[0]) {
+                    continue;
+                }
+
+                $hold = $key;
+                $jump = $next;
+                $hold[0] = $at;
+                $jump[0] = $at;
+                $out[] = $hold;
+                $out[] = $jump;
+
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Пустой кадр не несёт ни места, ни яркости.
+     *
+     * Место в нём мы уже не берём за место — см. `cut`. Яркость в нём нельзя
+     * брать за яркость ровно по той же причине: это не «стало прозрачно», а
+     * «отсюда актёра нет». Разница видна на промежутках, а они здесь не
+     * кадровые.
+     *
+     * Тянуть яркость К такому кадру — значит гасить актёра весь промежуток.
+     * Фон главы `Chapter2End` виден с 3.6 секунды, а следующий его кадр пуст
+     * на 68.8 — и фон затухает шестьдесят пять секунд.
+     *
+     * Тянуть ОТ него — значит проявлять актёра весь промежуток. Строка титра
+     * в `Chapter1End` приходит на 14.7 секунде и проявляется все четырнадцать.
+     * По набору таких проявлений 360, и середина у них 6.1 секунды.
+     *
+     * Поэтому с обеих сторон разом: до пустого кадра держится прежняя яркость,
+     * в сам кадр актёр гаснет мгновенно, дальше держится ноль до первого
+     * настоящего кадра, и там яркость берётся разом.
+     *
+     * Настоящее затухание и настоящее проявление от этого не страдают: автор
+     * пишет их кадром с НАСТОЯЩИМ местом и малой яркостью, а такой кадр не
+     * пустой и сюда не попадает. В том же `Chapter2End` актёр `LF` уходит
+     * именно так — 150 на своём месте, и только следующий кадр пуст. Ценой
+     * идут короткие сходы в пустоту, их середина 0.12 секунды: они
+     * превращаются в мгновенные. Отличить их от шестидесятипятисекундных можно
+     * было бы только порогом, а порог здесь — выдумка, которой в данных нет.
+     *
+     * @param list<array{0: float, 1: float}> $keys
+     * @param list<float>                     $blank
+     *
+     * @return list<array{0: float, 1: float}>
+     */
+    private static function stay(array $keys, array $blank): array
+    {
+        if (count($keys) < 2 || $blank === []) {
+            return $keys;
+        }
+
+        $empty = array_flip(array_map(static fn (float $t): string => (string) $t, $blank));
+        $out = [];
+        $prev = null;
+
+        foreach ($keys as $i => $key) {
+            if (!isset($empty[(string) $key[0]])) {
+                $out[] = $key;
+                $prev = $key[1];
+
+                continue;
+            }
+
+            // Держим прежнюю яркость до этого мига — и гаснем в нём разом.
+            if ($prev !== null && $prev > 0.0) {
+                $out[] = [$key[0], $prev];
+            }
+
+            $out[] = [$key[0], 0.0];
+            $prev = 0.0;
+
+            // Ноль держится до первого настоящего кадра, там — разом.
+            $next = $keys[$i + 1] ?? null;
+
+            if ($next !== null && !isset($empty[(string) $next[0]])) {
+                $out[] = [$next[0], 0.0];
+            }
         }
 
         return $out;

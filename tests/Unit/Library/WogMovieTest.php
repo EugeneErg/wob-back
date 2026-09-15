@@ -71,6 +71,72 @@ final class WogMovieTest extends TestCase
         self::assertStringContainsString('keyTimes="0;1"', $svg);
     }
 
+    /**
+     * Пустой кадр — это не место и не яркость, а отсутствие актёра.
+     *
+     * В наборе исчезнувшего актёра записывают обнулённым кадром: место (0, 0),
+     * поворот ноль, размер единица, яркость ноль. Принять такой кадр за
+     * настоящий нельзя дважды.
+     *
+     * По МЕСТУ: дорожка тянется через него насквозь, и актёр уезжает в левый
+     * верхний угол экрана и возвращается оттуда — по набору таких кадров 2223,
+     * и у всех до единого место ровно (0, 0).
+     *
+     * По ЯРКОСТИ: актёр проявляется и гаснет весь промежуток до соседнего
+     * кадра, а промежутки тут не кадровые. Строка титра приходит на 14.7
+     * секунде и проявляется все четырнадцать; фон главы гаснет шестьдесят пять
+     * секунд.
+     *
+     * Здесь актёр появляется в середине фильма и уходит в конце. Он обязан
+     * стоять на своём месте всё время и вспыхивать с гаснуть разом.
+     */
+    public function testAnActorWhoIsNotThereYetNeitherDriftsInNorFadesIn(): void
+    {
+        $this->writeLife(10.0, [
+            [0.0, 0.0, 0.0, 0],        // пусто: актёра нет
+            [5.0, 300.0, 200.0, 255],  // пришёл на своё место
+            [10.0, 0.0, 0.0, 0],       // пусто: ушёл
+        ]);
+
+        $svg = $this->build();
+
+        self::assertNotNull($svg);
+
+        // Место: ни одной точки в углу. Края дорожки достраиваются, поэтому
+        // ключей три, но значение у всех одно — актёр стоит, где стоял.
+        self::assertStringContainsString('values="300 200;300 200;300 200"', $svg);
+        // Точки (0, 0) не осталось нигде в дорожках — а viewBox её содержит
+        // законно, поэтому смотрим именно значения.
+        self::assertDoesNotMatchRegularExpression('/values="[^"]*\b0 0\b/', $svg);
+
+        // Яркость: ноль держится до 5 с, вспышка разом, и так же разом гаснет.
+        // Два ключа в один миг браузер и читает как мгновенную смену.
+        self::assertStringContainsString('keyTimes="0;0.5;0.5;1;1"', $svg);
+        self::assertStringContainsString('values="0;0;1;1;0"', $svg);
+    }
+
+    /**
+     * Настоящее затухание пишется кадром с НАСТОЯЩИМ местом, и его не трогаем.
+     *
+     * Иначе правило выше съело бы всякий плавный сход, а он в наборе есть: в
+     * `Chapter2End` актёр уходит через кадр с яркостью 150 на своём месте, и
+     * только следующий за ним кадр пуст.
+     */
+    public function testARealFadeIsLeftAlone(): void
+    {
+        $this->writeLife(10.0, [
+            [0.0, 300.0, 200.0, 255],
+            [5.0, 300.0, 200.0, 51],   // притух, но стоит на своём месте
+            [10.0, 300.0, 200.0, 255],
+        ]);
+
+        $svg = $this->build();
+
+        self::assertNotNull($svg);
+        self::assertStringContainsString('values="1;0.2;1"', $svg);
+        self::assertStringContainsString('keyTimes="0;0.5;1"', $svg);
+    }
+
     public function testAWordActorCarriesTheSetsOwnText(): void
     {
         $this->writeMovie(2.0, [
@@ -206,6 +272,80 @@ final class WogMovieTest extends TestCase
      *
      * @param list<array{image?: string, label?: string, moves: list<array{0: float, 1: float, 2: float}>}> $actors
      */
+    /**
+     * Фильм из одного актёра, у которого на ОДНИХ И ТЕХ ЖЕ кадрах и место, и
+     * яркость. Существующий писатель кладёт либо то, либо другое, а пустой
+     * кадр узнаётся только по обоим сразу.
+     *
+     * @param list<array{0: float, 1: float, 2: float, 3: int}> $frames
+     */
+    private function writeLife(float $length, array $frames): void
+    {
+        $head = 44;
+        $body = '';
+        $at = static function () use ($head, &$body): int {
+            return $head + strlen($body);
+        };
+
+        $pTimes = $at();
+
+        foreach ($frames as [$t]) {
+            $body .= pack('g', $t);
+        }
+
+        $pTypes = $at();
+        $body .= pack('l', 2); // перенос
+
+        $spots = [];
+
+        foreach ($frames as [, $x, $y]) {
+            $spots[] = $at();
+            $body .= pack('gg', $x, $y);
+        }
+
+        $pFrames = $at();
+
+        foreach ($spots as $p) {
+            $body .= pack('l', $p);
+        }
+
+        $pXform = $at();
+        $body .= pack('l', $pFrames);
+
+        $lights = [];
+
+        foreach ($frames as [, , , $a]) {
+            $lights[] = $at();
+            $body .= pack('llll', 0, 0, 0, $a);
+        }
+
+        $pAlpha = $at();
+
+        foreach ($lights as $p) {
+            $body .= pack('l', $p);
+        }
+
+        $anim = pack(
+            'llllllllll',
+            0, 1, 0, 1, 1, count($frames), $pTypes, $pTimes, $pXform, $pAlpha,
+        ) . pack('l', 0) . $body;
+
+        $strings = "\0IMAGE_HILL\0";
+        $pActors = 20;
+        $pAnims = $pActors + 0x20;
+        $pAnimList = $pAnims + 4;
+        $pStrings = $pAnimList + strlen($anim);
+
+        file_put_contents(
+            $this->dir . '/film.movie.binltl',
+            pack('g', $length) . pack('llll', 1, $pActors, $pAnims, $pStrings)
+            . pack('llllggll', 0, 1, 0, 0, -1.0, -1.0, 1, 0)
+            . pack('l', $pAnimList)
+            . $anim
+            . $strings,
+        );
+    }
+
     private function writeMovie(float $length, array $actors): void
     {
         // Строки лежат подряд, разделённые нулём, и актёр называет смещение.

@@ -73,6 +73,86 @@ final class WogBallKindTest extends TestCase
     }
 
     /**
+     * Размер части считается от СВОЕЙ картинки, а не от шара.
+     *
+     * Чужой `scale` умножает натуральный размер картинки, наш — ширину шара.
+     * Величины разные, и пропустить одну за другую нельзя: у common тело 64 px
+     * при радиусе 15, и доля шара выходит 0.55 вместо 1.17 — тело съёживается
+     * вдвое. Глаз при этом 32 px, и его доля совпадает почти точно СЛУЧАЙНО,
+     * поэтому глаза остаются прежними, а тело оказывается с них размером.
+     * Шар выглядит прозрачным, и ничто, кроме взгляда на него, об этом не
+     * скажет: чисел не меняется ни одно, все проверки молчат.
+     *
+     * Проверяется тут не само число, а то, из чего оно получено: ширина на
+     * экране обязана равняться натуральной ширине картинки, помноженной на
+     * чужой scale. Две части с РАЗНЫМИ картинками — иначе ошибка «делим на
+     * ширину шара» прошла бы мимо на любой одной.
+     */
+    public function testAPartIsSizedFromItsOwnPictureAndNotFromTheBall(): void
+    {
+        $ball = $this->build('common');
+        $width = 2 * $ball['r'];
+
+        $by = [];
+
+        foreach ($ball['parts'] as $part) {
+            $by[$part['name']] ??= $part;
+        }
+
+        // body.png — 64×64, scale в наборе 0.549843
+        self::assertSame('balls/common/body.png', $by['body']['src']);
+        self::assertEqualsWithDelta(64 * 0.549843, $width * $by['body']['scale'], 0.01);
+
+        // eye_glass_1.png — 32×32, scale 0.5. Картинка вдвое мельче тела, и
+        // доля шара обязана выйти другой.
+        self::assertSame('balls/_generic/eye_glass_1.png', $by['lefteye']['src']);
+        self::assertEqualsWithDelta(32 * 0.5, $width * $by['lefteye']['scale'], 0.01);
+
+        self::assertNotSame($by['body']['scale'], $by['lefteye']['scale']);
+    }
+
+    /**
+     * Зрачок меряется своей картинкой и ходит внутри глаза.
+     *
+     * Размера зрачка в наборе НЕТ — там сказано только, какая это картинка и
+     * каков `pupilinset`. Раньше размер брался выдуманным числом 0.3, то есть
+     * 9 px при глазе 16: зрачок занимал больше половины глаза, сливался с
+     * чёрным телом, и шар читался как «тело размером с глаза».
+     *
+     * `pupilinset` же меряется натуральными пикселями САМОГО ГЛАЗА, а не шара:
+     * глаз 32 px, отступ 12 — зрачок ходит на 4 px от середины, то есть 2 px
+     * на экране. Поделив отступ на радиус шара, мы получали 0.8, и ход
+     * выходил отрицательным — зрачок замирал в середине намертво, и глаза
+     * переставали быть бегающими.
+     */
+    public function testThePupilIsSizedByItsOwnPictureAndCanMoveInsideTheEye(): void
+    {
+        $ball = $this->build('common');
+        $eye = null;
+
+        foreach ($ball['parts'] as $part) {
+            if ($part['name'] === 'lefteye') {
+                $eye = $part;
+
+                break;
+            }
+        }
+
+        self::assertNotNull($eye);
+
+        $width = 2 * $ball['r'];
+        // pupil1.png — 8×8, scale глаза 0.5.
+        self::assertEqualsWithDelta(8 * 0.5, $width * $eye['pupilSize'], 0.01);
+        // Зрачок — четверть глаза, а не половина с лишним.
+        self::assertLessThan(0.35, $eye['pupilSize'] / $eye['scale']);
+
+        // Ход зрачка: половина глаза минус отступ, и он обязан быть больше нуля.
+        $reach = $width * $eye['scale'] / 2 - $eye['pupilInset'] * $ball['r'];
+        self::assertGreaterThan(0.0, $reach);
+        self::assertEqualsWithDelta((32 / 2 - 12) * 0.5, $reach, 0.01);
+    }
+
+    /**
      * A part with no state list is visible always, and one with a list is
      * visible only in those poses. Two thirds of the parts in the set have no
      * list at all, so getting the empty case backwards would hide most of

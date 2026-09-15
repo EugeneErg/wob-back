@@ -25,7 +25,7 @@ final class WogAnim
     private const TRANSLATE = 2;
 
     /**
-     * @return array{tracks: array<string, list<array{0: float, 1: float}>>, dur: float}
+     * @return array{tracks: array<string, list<array{0: float, 1: float}>>, dur: float, blank: list<float>}
      */
     /**
      * @param bool $keepStill Оставлять ли дорожку, которая никуда не движется.
@@ -39,7 +39,7 @@ final class WogAnim
      *                  смещения внутри каждого отсчитываются от его начала —
      *                  поэтому хвост файла с нужного места и есть такой файл.
      */
-    /** @return array{tracks: array<string, list<array{0: float, 1: float}>>, dur: float} */
+    /** @return array{tracks: array<string, list<array{0: float, 1: float}>>, dur: float, blank: list<float>} */
     public static function read(string $file, int $from = 0, bool $keepStill = false): array
     {
         $b = (string) file_get_contents($file);
@@ -79,12 +79,20 @@ final class WogAnim
 
         // A track's frames are an array of pointers, one per frame. A null
         // pointer means this track says nothing on that frame.
-        $walk = static function (int $base, callable $each) use ($nFrames, $i32, $times): void {
+        //
+        // `$skip` — кадры, на которых актёра нет вовсе (см. ниже). Их пропускает
+        // только преобразование: яркость на таком кадре как раз и говорит, что
+        // актёра не видно, и выбросить её значило бы оставить его на экране.
+        $walk = static function (int $base, callable $each, array $skip = []) use ($nFrames, $i32, $times): void {
             if ($base === 0) {
                 return;
             }
 
             for ($i = 0; $i < $nFrames; $i++) {
+                if (isset($skip[$i])) {
+                    continue;
+                }
+
                 $at = $i32($base + $i * 4);
 
                 if ($at !== 0) {
@@ -92,6 +100,55 @@ final class WogAnim
                 }
             }
         };
+
+        // Кадр, на котором актёра нет.
+        //
+        // Яркость ноль, а преобразование — пустая заготовка: на месте (0, 0),
+        // без поворота, в natural size. Это не положение, а его отсутствие:
+        // тот, кто писал файл, просто обнулил кадр вместо того, чтобы оставить
+        // пустой указатель. Отличить одно от другого можно: настоящего актёра
+        // в углу экрана не держат — по всему набору заставок таких кадров 2223
+        // и у всех до единого место ровно (0, 0).
+        //
+        // Принять их за место нельзя. Дорожка тянется через кадр насквозь, и
+        // актёр на глазах уезжает в левый верхний угол и возвращается оттуда —
+        // на появлении, на исчезновении и на каждом моргании. В оригинале он
+        // просто гаснет там, где стоял.
+        $blankAt = [];
+
+        if ($hasAlpha !== 0 && $pAlpha !== 0) {
+            for ($i = 0; $i < $nFrames; $i++) {
+                $at = $i32($pAlpha + $i * 4);
+
+                if ($at === 0 || $i32($at + 12) !== 0) {
+                    continue;
+                }
+
+                $empty = true;
+
+                for ($t = 0; $hasXform !== 0 && $t < $nXform; $t++) {
+                    $key = $i32($i32($pXform + $t * 4) + $i * 4);
+
+                    if ($key === 0) {
+                        continue;
+                    }
+
+                    $empty = match ($i32($pTypes + $t * 4)) {
+                        self::ROTATE => abs($f32($key + 8)) < 1e-4,
+                        self::TRANSLATE => abs($f32($key)) < 1e-4 && abs($f32($key + 4)) < 1e-4,
+                        default => abs($f32($key) - 1.0) < 1e-4 && abs($f32($key + 4) - 1.0) < 1e-4,
+                    };
+
+                    if (!$empty) {
+                        break;
+                    }
+                }
+
+                if ($empty) {
+                    $blankAt[$i] = true;
+                }
+            }
+        }
 
         if ($hasXform !== 0) {
             for ($t = 0; $t < $nXform; $t++) {
@@ -110,7 +167,7 @@ final class WogAnim
                             $put('sy', $time, $f32($at + 4));
                         })(),
                     };
-                });
+                }, $blankAt);
             }
         }
 
@@ -148,7 +205,17 @@ final class WogAnim
             }
         }
 
-        return ['tracks' => $out, 'dur' => $times === [] ? 0.0 : end($times)];
+        $blank = [];
+
+        foreach (array_keys($blankAt) as $i) {
+            $blank[] = WogGeometry::fixed($times[$i] ?? 0.0, 4);
+        }
+
+        return [
+            'tracks' => $out,
+            'dur' => $times === [] ? 0.0 : end($times),
+            'blank' => $blank,
+        ];
     }
 
     /**
