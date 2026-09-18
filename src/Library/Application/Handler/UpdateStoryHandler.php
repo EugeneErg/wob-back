@@ -8,6 +8,8 @@ use Wob\Library\Application\Command\UpdateStory;
 use Wob\Library\Domain\Model\Story;
 use Wob\Library\Domain\Repository\StoryRepository;
 use Wob\Library\Domain\ValueObject\AssetId;
+use Wob\Library\Domain\ValueObject\Backdrop;
+use Wob\Library\Domain\ValueObject\CanvasRect;
 use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\OwnerId;
 use Wob\Library\Domain\ValueObject\StoryId;
@@ -45,6 +47,19 @@ final readonly class UpdateStoryHandler
 
         if ($command->startNodeId !== null) {
             $story->startOn($command->startNodeId === '' ? null : $command->startNodeId);
+        }
+
+        if ($command->backdrop !== null) {
+            $src = trim((string) $command->backdrop['src']);
+
+            // Пустая картинка — это «задника нет», а не задник с пустым путём:
+            // то же правило, по которому его читают из строки базы.
+            $story->setBackdrop($src === '' ? null : new Backdrop($src, new CanvasRect(
+                (float) $command->backdrop['x'],
+                (float) $command->backdrop['y'],
+                (float) $command->backdrop['w'],
+                (float) $command->backdrop['h'],
+            )));
         }
 
         if ($command->chapterOrder !== null) {

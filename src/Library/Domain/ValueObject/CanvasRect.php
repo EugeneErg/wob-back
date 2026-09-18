@@ -20,7 +20,23 @@ use Wob\Shared\Domain\Exception\InvariantViolation;
  */
 final readonly class CanvasRect implements JsonSerializable
 {
-    private const MIN_SIDE = 80.0;
+    /**
+     * Было 80, и это число мешало правде.
+     *
+     * Взялось оно из времён, когда глава на доске была прямоугольником под
+     * точки, и означало «меньше в неё не прицелишься». Точек на доске нет:
+     * глава — картинка, а величина её — величина этой картинки. Остров
+     * «Механизм» в оригинале 76 единиц шириной, и порог в 80 отказывал бы
+     * настоящему острову, требуя подрисовать ему четыре единицы из ниоткуда.
+     *
+     * Прицеливаться мешает не размер, а соотношение: доска подгоняется под своё
+     * содержимое, и глава в сто единиц рядом с главой в сто единиц занимает
+     * половину экрана. Судить об этом внутри одной рамки нельзя — соседей она
+     * не видит, — поэтому здесь остаётся то, что рамка знает про себя сама:
+     * нулевой её быть нельзя. Нулевую не видно, её теряют движением руки и не
+     * могут поймать обратно.
+     */
+    private const MIN_SIDE = 1.0;
 
     public function __construct(
         public float $x,
@@ -34,9 +50,6 @@ final readonly class CanvasRect implements JsonSerializable
             }
         }
 
-        // A chapter smaller than this cannot hold a point you could aim at, and
-        // an area of zero size is invisible — dragged to nothing by accident and
-        // impossible to grab back.
         if ($w < self::MIN_SIDE || $h < self::MIN_SIDE) {
             throw InvariantViolation::because(
                 sprintf("A chapter on the board must be at least %dx%d", (int) self::MIN_SIDE, (int) self::MIN_SIDE),

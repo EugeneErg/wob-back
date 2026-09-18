@@ -104,7 +104,14 @@ final readonly class ForkOverlay
             $levels[$id] ??= $level;
         }
 
-        return new ContentSnapshot(array_values($chapters), array_values($levels));
+        // Начало и задник берутся у основы: копия расходится с ней главами и
+        // уровнями, а не тем, откуда начинать и что нарисовано позади.
+        return new ContentSnapshot(
+            array_values($chapters),
+            array_values($levels),
+            $this->base->startNodeId,
+            $this->base->backdrop,
+        );
     }
 
     /**

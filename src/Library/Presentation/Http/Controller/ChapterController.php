@@ -35,6 +35,28 @@ final readonly class ChapterController
      * правки одной сходятся к последней.
      */
 
+    /**
+     * Картинка главы на доске истории.
+     *
+     * Отдельно от `describe`: там автор правит саму главу, здесь — как она
+     * выглядит на доске. Слитые в один запрос, они стирали бы друг друга.
+     */
+    public function icon(Request $request, string $storyId, string $chapterId): JsonResponse
+    {
+        $data = $request->validate([
+            "icon" => ["nullable", "string", "max:2000"],
+        ]);
+
+        ($this->edit)(EditMap::icon(
+            $this->owner($request),
+            $storyId,
+            $chapterId,
+            (string) ($data["icon"] ?? ""),
+        ));
+
+        return new JsonResponse(["ok" => true]);
+    }
+
     public function describe(Request $request, string $storyId, string $chapterId): JsonResponse
     {
         $data = $request->validate([

@@ -45,6 +45,21 @@ final class Chapter
 
         // Where this chapter sits on the story board.
         private ?CanvasRect $canvas = null,
+
+        /*
+         * Картинка главы на доске истории.
+         *
+         * Форма её — силуэт самой картинки, а не прямоугольник и не обводка.
+         * Так это и в оригинале: там глава на карте мира — кнопка с картинкой,
+         * у которой своя прозрачность и свой размер.
+         *
+         * Картинка главы и её внутренность — разные вещи. Тут у главы нет ни
+         * точек, ни их расположения: она кнопка. Точки живут внутри и сюда не
+         * заглядывают.
+         *
+         * Пусто — глава рисуется прямоугольником, как рисовалась.
+         */
+        private string $icon = '',
     ) {
         $this->rename($title);
         $this->assertGraphIsSound();
@@ -90,6 +105,26 @@ final class Chapter
         }
 
         $this->image = $image;
+    }
+
+    public function icon(): string
+    {
+        return $this->icon;
+    }
+
+    /**
+     * Как глава выглядит на доске истории.
+     *
+     * Поворота здесь нет: повёрнутый значок — это повёрнутая картинка, и
+     * поворачивают её там же, где рисуют.
+     */
+    public function setIcon(string $icon): void
+    {
+        if (mb_strlen($icon) > 2000) {
+            throw InvariantViolation::because("Chapter board picture is too long");
+        }
+
+        $this->icon = $icon;
     }
 
     public function holds(LevelId $levelId): bool

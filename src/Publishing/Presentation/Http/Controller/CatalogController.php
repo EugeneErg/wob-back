@@ -61,6 +61,28 @@ final readonly class CatalogController
     }
 
     /**
+     * Один уровень со всем, что ему нужно.
+     *
+     * Отдельно от `play`, потому что это разные мгновения: карту смотрят до
+     * выбора, уровень берут после. И тот же ответ на «нет такого», что и у
+     * истории: не существует и не полагается выглядят одинаково, иначе по
+     * ответам можно было бы перебрать чужое содержимое.
+     */
+    public function level(Request $request, string $storyId, string $levelId): JsonResponse
+    {
+        $level = $this->catalog->level($storyId, $levelId, $this->playerId($request));
+
+        if ($level === null) {
+            return new JsonResponse(
+                ['error' => ['code' => 'not_found', 'message' => 'No such level']],
+                404,
+            );
+        }
+
+        return new JsonResponse($level);
+    }
+
+    /**
      * The signed-in player, or null.
      *
      * Read from the guard rather than from the middleware attribute, because

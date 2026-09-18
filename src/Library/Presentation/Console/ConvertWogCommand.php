@@ -6,6 +6,7 @@ namespace Wob\Library\Presentation\Console;
 
 use Illuminate\Console\Command;
 use Wob\Library\Infrastructure\Foreign\WogBallKind;
+use Wob\Library\Infrastructure\Foreign\WogBoard;
 use Wob\Library\Infrastructure\Foreign\WogFile;
 use Wob\Library\Infrastructure\Foreign\WogGeometry;
 use Wob\Library\Infrastructure\Foreign\WogLevel;
@@ -43,6 +44,10 @@ final class ConvertWogCommand extends Command
 
     /** @var list<string> */
     private array $skipped = [];
+
+    /** Разобранный список уровней. Считается один раз, см. `levelNames`. */
+    /** @var list<string>|null */
+    private ?array $named = null;
 
     /**
      * Заставки набора, собранные в наши файлы.
@@ -84,6 +89,139 @@ final class ConvertWogCommand extends Command
         return $out;
     }
 
+    /**
+     * Место главы на доске истории и её картинка там, по ключу острова.
+     *
+     * @var array<string, array{icon: string, x: float, y: float, w: float, h: float}>
+     */
+    private array $spots = [];
+
+    /**
+     * Задник карты главы, по ключу острова.
+     *
+     * @var array<string, array{src: string, x: float, y: float, w: float, h: float}>
+     */
+    private array $maps = [];
+
+    /**
+     * Точки на карте главы в долях её рамки: остров → уровень → место.
+     *
+     * @var array<string, array<string, array{x: float, y: float}>>
+     */
+    private array $dots = [];
+
+    /** Задник доски истории: планета вместе с заголовком. */
+    /** @var array{src: string, x: float, y: float, w: float, h: float}|null */
+    private ?array $sky = null;
+
+    /**
+     * Карта мира и карты островов: где что стоит.
+     *
+     * Читается это тем же файлом сцены, что и уровень, и раньше выбрасывалось
+     * целиком — в списке уровней таких папок нет, значит и смотреть нечего. В
+     * коде ниже даже стояло, будто раскладки точек в наборе не существует и её
+     * приходится сочинять по глубине зависимостей. Существует: у каждого уровня
+     * на острове своя кнопка со своими x, y и углом, а у каждого острова — своя
+     * кнопка на карте мира.
+     *
+     * Собранные картинки кладутся рядом с пакетом, как и заставки: это наши
+     * файлы, а не их, и под чужим корнем им делать нечего.
+     *
+     * @param array<string, string> $images
+     */
+    private function makeBoard(string $root, array $images): void
+    {
+        $into = rtrim((string) ($this->option('films') ?: dirname((string) $this->option('out')) . '/films'), '/');
+        $into = dirname($into) . '/board';
+        $say = function (string $what, int $count = 1): void {
+            $this->missed['(набор)'][$what] ??= 0;
+            $this->missed['(набор)'][$what] += $count;
+        };
+
+        $world = $this->read("{$root}/levels/MapWorldView/MapWorldView.scene.bin");
+
+        if ($world !== null) {
+            $buttons = WogBoard::buttons($world, $images, $root);
+            $this->sky = WogBoard::backdrop($world, $images, $root, $into, 'story', $say);
+
+            if ($this->sky !== null) {
+                $this->marks[$this->sky['src']] = $this->sky['src'];
+            }
+
+            foreach ($this->islands as $isle) {
+                $key = $isle['map'];
+                $spot = $buttons[$key] ?? null;
+
+                if ($key === '' || $spot === null) {
+                    continue;
+                }
+
+                $icon = WogBoard::turned($root . '/' . $spot['src'], $spot['rot'], $into, 'icon-' . $key);
+
+                if ($icon === null) {
+                    continue;
+                }
+
+                $this->marks[$icon] = $icon;
+                $this->spots[$key] = [
+                    'icon' => $icon,
+                    'x' => $spot['x'], 'y' => $spot['y'], 'w' => $spot['w'], 'h' => $spot['h'],
+                ];
+            }
+        }
+
+        foreach ($this->islands as $isle) {
+            $key = $isle['map'];
+            $scene = $key === '' ? null : $this->read("{$root}/levels/{$key}/{$key}.scene.bin");
+
+            if ($scene === null) {
+                continue;
+            }
+
+            $frame = WogBoard::backdrop($scene, $images, $root, $into, 'map-' . $key, $say);
+            // Карта главы рисуется в рамке 16:9 с обрезкой по краям, а точки
+            // стоят в долях этой рамки. Не совпади пропорции — задник срежется,
+            // точки нет, и вся раскладка съедет ровно на срезанное.
+            $frame = $frame === null ? null : WogBoard::padded($frame, 16 / 9, $into, 'map-' . $key);
+
+            if ($frame === null) {
+                continue;
+            }
+
+            $this->marks[$frame['src']] = $frame['src'];
+            $this->maps[$key] = $frame;
+
+            foreach (WogBoard::buttons($scene, $images, $root) as $id => $dot) {
+                if (!str_starts_with($id, 'lb_')) {
+                    continue;
+                }
+
+                // Середина картинки, а не её угол: точка на карте — место, а не
+                // прямоугольник, и у нас она рисуется от своей середины.
+                $this->dots[$key][substr($id, 3)] = [
+                    'x' => WogGeometry::fixed(($dot['x'] + $dot['w'] / 2 - $frame['x']) / $frame['w'] * 100, 2),
+                    'y' => WogGeometry::fixed(($dot['y'] + $dot['h'] / 2 - $frame['y']) / $frame['h'] * 100, 2),
+                ];
+            }
+        }
+    }
+
+    /**
+     * От кого зависит уровень. Их бывает несколько.
+     *
+     * `depends="TowerOfGoo,Chain"` — не имя уровня, а список: две ветки первого
+     * острова сходятся на «Оде строителю моста», и он ждёт обеих. Читалось это
+     * целой строкой, совпадения с таким «уровнем» не находилось, тропа не
+     * рисовалась — и уровень оказывался открыт с самого начала, наравне с
+     * первым. Четыре уровня набора из сорока семи.
+     *
+     * @return list<string>
+     */
+    private static function dependsOf(string $depends): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $depends))));
+    }
+
     /** Средний из трёх: чем закрыть, ЧТО ПОКАЗАТЬ, чем открыть. */
     private static function filmOf(string $cutscene): string
     {
@@ -95,7 +233,7 @@ final class ConvertWogCommand extends Command
     /**
      * Острова набора: название и уровни в порядке зависимостей.
      *
-     * @var list<array{title: string, levels: list<array{
+     * @var list<array{title: string, map: string, levels: list<array{
      *     id: string, depends: string, name: string,
      *     text: string, cutscene: string, oncomplete: string,
      * }>}>
@@ -168,6 +306,10 @@ final class ConvertWogCommand extends Command
         $this->fx = WogTables::effects($root);
         $this->films = $this->makeFilms($root, $res['images'], $strings);
         $balls = $this->ballDefinitions($root);
+        // После островов: доска знает их по ключу `map`, а ключ читается вместе
+        // со списком уровней.
+        $this->levelNames($root);
+        $this->makeBoard($root, $res['images']);
 
         $levels = [];
         $kinds = [];
@@ -248,9 +390,16 @@ final class ConvertWogCommand extends Command
 
         if ($this->skipped !== []) {
             $this->line(sprintf(
-                'не уровни, пропущены (%d): %s',
+                // «Пропущены» было бы теперь неправдой: карта мира и карты
+                // островов не уровни, но именно из них берутся места глав и
+                // точек. Прочитаны они как доска, а не как то, во что играют.
+                'не уровни (%d): %s',
                 count($this->skipped),
                 implode(', ', $this->skipped),
+            ));
+            $this->line(sprintf(
+                'из них прочитаны как доска: карта мира и %d остров(а/ов)',
+                count($this->maps),
             ));
         }
 
@@ -456,7 +605,7 @@ final class ConvertWogCommand extends Command
                 $prev = $name;
             }
 
-            $islands = [['title' => 'Всё подряд', 'levels' => $chain]];
+            $islands = [['title' => 'Всё подряд', 'map' => '', 'levels' => $chain]];
         }
 
         foreach ($islands as $n => $isle) {
@@ -472,18 +621,25 @@ final class ConvertWogCommand extends Command
             $depth = [];
             $nodes = [];
             $lane = [];
+            $dots = $this->dots[$isle['map']] ?? [];
 
             foreach ($mine as $one) {
-                $from = $one['depends'];
+                $parents = self::dependsOf($one['depends']);
+                $from = $parents[0] ?? '';
                 $step = $from !== '' && isset($depth[$from]) ? $depth[$from] + 1 : 0;
                 $depth[$one['id']] = $step;
                 $row = $lane[$step] = ($lane[$step] ?? -1) + 1;
+                // Настоящее место точки, если оно у неё есть. Раскладка по
+                // глубине зависимостей осталась запасной: чужой набор может
+                // прийти без карт островов, и тогда цепочка вправо, ветка вниз
+                // — честная карта, просто не та же самая.
+                $dot = $dots[$one['id']] ?? ['x' => 6 + $step * 9, 'y' => 10 + $row * 14];
 
                 $nodes[$one['id']] = [
                     'id' => 'nd-wog-' . mb_strtolower($one['id']),
                     'levelId' => 'wog-' . mb_strtolower($one['id']),
-                    'x' => 6 + $step * 9,
-                    'y' => 10 + $row * 14,
+                    'x' => $dot['x'],
+                    'y' => $dot['y'],
                     'next' => [],
                     // Название точки на карте. В исходнике оно лежит не в
                     // острове, а в таблице текстов — в острове только ключ, —
@@ -536,6 +692,18 @@ final class ConvertWogCommand extends Command
                     $this->missed[$one['id']]['звук в заставке — когда он звучит, в наборе не сказано'] = $voices;
                 }
 
+                // Ждёт двоих, а откроется от одного.
+                //
+                // В исходнике «Ода строителю моста» стоит там, где сходятся две
+                // ветки острова, и названы обе. У нас точка открывается, как
+                // только пройден любой из тех, кто в неё ведёт, — это правило
+                // игры, а не мелочь переноса, и менять его ради одного набора
+                // нельзя. Тропы от обоих нарисованы; разница в том, что игрок
+                // дойдёт сюда, пройдя одну ветку из двух.
+                if (count(self::dependsOf($one['depends'])) > 1) {
+                    $this->missed[$one['id']]['уровень ждал двух других, а откроется от любого'] = 1;
+                }
+
                 if ($one['oncomplete'] !== '') {
                     $this->missed[$one['id']]['действие по прохождению — оно про чужое меню'] = 1;
                 }
@@ -543,17 +711,29 @@ final class ConvertWogCommand extends Command
 
             // Тропы: от того, от кого зависят, к тому, кто зависит.
             foreach ($mine as $one) {
-                $from = $one['depends'];
-
-                if ($from !== '' && isset($nodes[$from])) {
-                    $nodes[$from]['next'][] = $nodes[$one['id']]['id'];
+                foreach (self::dependsOf($one['depends']) as $from) {
+                    if (isset($nodes[$from])) {
+                        $nodes[$from]['next'][] = $nodes[$one['id']]['id'];
+                    }
                 }
             }
+
+            $spot = $this->spots[$isle['map']] ?? null;
+            $frame = $this->maps[$isle['map']] ?? null;
 
             $chapters[] = [
                 'id' => 'wog-ch' . ($n + 1), 'storyId' => 'wog',
                 'title' => $isle['title'],
-                'image' => '', 'map' => '', 'canvas' => ['w' => 1600, 'h' => 900],
+                // Задник карты главы — сам остров, собранный из своих слоёв.
+                'image' => $frame['src'] ?? '',
+                'map' => '',
+                // Место главы на доске истории. Без кнопки на карте мира взять
+                // его неоткуда, и глава ложится прежним прямоугольником — не
+                // на своё место, но и не поверх соседки.
+                'canvas' => $spot === null
+                    ? ['w' => 1600, 'h' => 900]
+                    : ['x' => $spot['x'], 'y' => $spot['y'], 'w' => $spot['w'], 'h' => $spot['h']],
+                'icon' => $spot['icon'] ?? '',
                 'hot' => [], 'nodes' => array_values($nodes),
             ];
         }
@@ -693,6 +873,17 @@ final class ConvertWogCommand extends Command
             'kind' => 'library',
             'stories' => [[
                 'id' => 'wog', 'title' => 'World of Goo (импорт)', 'cover' => '',
+                // Задник доски: планета вместе с заголовком.
+                //
+                // Одной картинкой, потому что это одна картина: заголовок в
+                // оригинале собран из трёх кусков — WORLD, OF, GOO, — и стоят
+                // они не в углу, а вокруг планеты, на ободе которой и лежат
+                // острова. Разобрать их на три поля значило бы дать автору три
+                // ручки от одной вещи.
+                //
+                // Место при нём, а не отдельно: острова стоят в тех же числах,
+                // и задник без рамки пришлось бы совмещать с ними на глаз.
+                'backdrop' => $this->sky,
                 'chapters' => array_column($chapters, 'id'), 'hot' => [],
                 'start' => $chapters[0]['id'] ?? '',
             ]],
@@ -734,6 +925,13 @@ final class ConvertWogCommand extends Command
      */
     private function levelNames(string $root): array
     {
+        // Второй раз не пересчитывается. Доске острова нужны раньше уровней, а
+        // уровням — сам список; посчитать дважды значило бы удвоить острова, и
+        // каждая глава пришла бы парой.
+        if ($this->named !== null) {
+            return $this->named;
+        }
+
         $named = [];
 
         foreach (glob($root . '/islands/*') ?: [] as $file) {
@@ -772,6 +970,16 @@ final class ConvertWogCommand extends Command
 
             $this->islands[] = [
                 'title' => (string) ($isle['attrs']['name'] ?? 'Остров'),
+                // Одно имя на две вещи: так остров назван кнопкой на карте мира
+                // и так же названа его собственная сцена. Первое даёт главе
+                // место на доске, второе — раскладку её точек; без них глава
+                // остаётся безымянным мешком уровней, каким и была.
+                //
+                // Своя иконка у острова тоже названа — `icon` в этом же теге, —
+                // но это другая картинка: `islandicon_1` нарисован с небом и
+                // рамкой, а на карте мира стоит `ii_c1_over`. Картинку главы
+                // берём ту, что видно на карте, а не ту, что названа иконкой.
+                'map' => (string) ($isle['attrs']['map'] ?? ''),
                 'levels' => $mine,
             ];
         }
@@ -800,7 +1008,7 @@ final class ConvertWogCommand extends Command
             $this->skipped = $skipped;
         }
 
-        return $out;
+        return $this->named = $out;
     }
 
     /** @return array<string, array<string, mixed>> */
@@ -829,6 +1037,14 @@ final class ConvertWogCommand extends Command
     private function ballDefinitions(string $root): array
     {
         $out = [];
+
+        // Папки может не быть вовсе: чужой набор бывает собран иначе. `scandir`
+        // на отсутствующей папке не возвращает false молча — он сперва ругается
+        // предупреждением, и под строгим обработчиком ошибок это уже не
+        // «набор без шаров», а падение всего переноса.
+        if (!is_dir($root . '/balls')) {
+            return $out;
+        }
 
         foreach (scandir($root . '/balls') ?: [] as $name) {
             $def = $this->read("{$root}/balls/{$name}/balls.xml.bin");

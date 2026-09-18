@@ -46,6 +46,10 @@ Route::post("auth/dev", [AuthController::class, "dev"]);
 // because it is the one that has to work before there is one.
 Route::get("catalog", [CatalogController::class, "index"]);
 Route::get("catalog/{storyId}", [CatalogController::class, "play"]);
+// Уровень целиком — когда его открывают. История приезжает без сущностей:
+// игроку перед картой нужны имена и хеши, а не полтора мегабайта уровней,
+// из которых он откроет один.
+Route::get("catalog/{storyId}/levels/{levelId}", [CatalogController::class, "level"]);
 
 // Байты файла — открыты, как и витрина, и по той же причине: выпущенную
 // историю играют посторонние, а состоит она из своих картинок и звуков.
@@ -107,6 +111,9 @@ Route::middleware(ResolveDomainUser::class)->group(static function (): void {
      * пересекаются, одна и та же сходится к последней правке.
      */
     Route::patch("stories/{storyId}/chapters/{chapterId}", [ChapterController::class, "describe"]);
+    // Картинка главы на доске — отдельно от самой главы: это другой жест, и
+    // слитые в один запрос они стирали бы друг друга.
+    Route::patch("stories/{storyId}/chapters/{chapterId}/icon", [ChapterController::class, "icon"]);
     Route::patch("stories/{storyId}/chapters/{chapterId}/nodes/{nodeId}", [ChapterController::class, "editNode"]);
     Route::post("stories/{storyId}/links", [ChapterController::class, "link"]);
     // Концы связи в адресе, а не в теле: тело у DELETE переживает не всякий

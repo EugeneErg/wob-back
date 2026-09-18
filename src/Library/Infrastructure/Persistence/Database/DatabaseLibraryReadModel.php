@@ -32,6 +32,7 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
                 "id" => $s->public_id,
                 "title" => $s->title,
                 "cover" => $s->cover,
+                "backdrop" => self::backdropOf($s),
                 "startNodeId" => $s->start_node_id,
                 "intro" => $s->intro,
                 "hot" => $this->decode($s->hot),
@@ -80,6 +81,9 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
                 "storyId" => $story->public_id,
                 "title" => $c->title,
                 "image" => $c->image,
+                // Картинка главы на доске истории. С внутренностью главы не
+                // связана — там у неё есть точки, тут она кнопка.
+                "icon" => (string) ($c->icon ?? ''),
                 "map" => $c->map,
                 "canvas" => [
                     "x" => (float) $c->canvas_x, "y" => (float) $c->canvas_y,
@@ -116,6 +120,7 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             "id" => $story->public_id,
             "title" => $story->title,
             "cover" => $story->cover,
+            "backdrop" => self::backdropOf($story),
             "startNodeId" => $story->start_node_id,
             "intro" => $story->intro,
             "hot" => $this->decode($story->hot),
@@ -247,6 +252,7 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
                 'id' => $story['id'],
                 'title' => $story['title'],
                 'cover' => $story['cover'],
+                'backdrop' => $story['backdrop'] ?? null,
                 'chapters' => array_column($story['chapters'], 'id'),
                 'hot' => $story['hot'],
             ];
@@ -364,6 +370,28 @@ final readonly class DatabaseLibraryReadModel implements LibraryReadModel
             "entities" => $this->decode($l->entities),
             "hot" => $this->decode($l->hot),
             "hash" => $l->content_hash,
+        ];
+    }
+
+    /**
+     * Задник истории: картинка вместе с местом.
+     *
+     * Одним полем, а не пятью рядом. Пять полей на той стороне пришлось бы
+     * собирать обратно, и каждый, кто их читает, решал бы сам, что значит
+     * картинка без рамки. Здесь это решено один раз: нет картинки — нет задника.
+     *
+     * @return array{src: string, x: float, y: float, w: float, h: float}|null
+     */
+    private static function backdropOf(object $row): ?array
+    {
+        $src = trim((string) ($row->backdrop ?? ''));
+
+        return $src === '' ? null : [
+            'src' => $src,
+            'x' => (float) ($row->backdrop_x ?? 0),
+            'y' => (float) ($row->backdrop_y ?? 0),
+            'w' => (float) ($row->backdrop_w ?? 0),
+            'h' => (float) ($row->backdrop_h ?? 0),
         ];
     }
 

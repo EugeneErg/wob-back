@@ -88,6 +88,25 @@ final readonly class StoryController
             "chapterOrder.*" => ["string", "max:64"],
             "startNodeId" => ["nullable", "string", "max:64"],
             "intro" => ["nullable", "string", "max:2000"],
+            // Картинка позади глав вместе со своим местом. Приезжает целиком:
+            // порознь картинка и рамка бессмысленны.
+            //
+            // `exclude_without` тут обязателен: без него правила на вложенные
+            // поля срабатывают и когда самого задника в письме нет вовсе, и
+            // переименовать историю становится нельзя, не прислав заодно
+            // картинку. `present`, а не `required`: пустая картинка — это
+            // «задника нет», и запрещать её значило бы запретить его снять.
+            //
+            // `nullable` при этом тоже обязателен, и не ради вкуса: пустую
+            // строку приложение превращает в null посредником, ещё до правил, —
+            // так что «снять задник» приезжает сюда как null и без этого
+            // отвергается сообщением «должно быть строкой».
+            "backdrop" => ["nullable", "array"],
+            "backdrop.src" => ["exclude_without:backdrop", "present", "nullable", "string", "max:2000"],
+            "backdrop.x" => ["exclude_without:backdrop", "present", "numeric"],
+            "backdrop.y" => ["exclude_without:backdrop", "present", "numeric"],
+            "backdrop.w" => ["exclude_without:backdrop", "present", "numeric"],
+            "backdrop.h" => ["exclude_without:backdrop", "present", "numeric"],
         ]);
 
         $story = ($this->update)(new UpdateStory(
@@ -99,6 +118,7 @@ final readonly class StoryController
             $data["chapterOrder"] ?? null,
             $data["startNodeId"] ?? null,
             $data["intro"] ?? null,
+            $data["backdrop"] ?? null,
         ));
 
         return new JsonResponse($this->stamp($story));

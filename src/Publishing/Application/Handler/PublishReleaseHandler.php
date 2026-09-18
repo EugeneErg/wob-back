@@ -158,6 +158,25 @@ final readonly class PublishReleaseHandler
             $entry->id = $chapter->id->value;
             $entry->title = $chapter->title();
             $entry->image = $chapter->image();
+
+            // Как глава выглядит на доске истории — её картинка и её место.
+            //
+            // Замораживается вместе с остальным, а не читается у живой главы:
+            // игрок смотрит на ту расстановку, в которую играет, а автор
+            // волен передвинуть главы сразу после выпуска. Без этого экран
+            // выбора главы у игрока пуст — картинок нет, мест нет, и выбирать
+            // нечем, хотя у автора всё расставлено.
+            if ($chapter->icon() !== '') {
+                $entry->icon = $chapter->icon();
+            }
+
+            $entry->canvas = (object) [
+                'x' => $chapter->canvas()->x,
+                'y' => $chapter->canvas()->y,
+                'w' => $chapter->canvas()->w,
+                'h' => $chapter->canvas()->h,
+            ];
+
             $entry->nodes = array_map(static function ($node): stdClass {
                 $out = new stdClass();
                 $out->id = $node->id->value;
@@ -203,6 +222,13 @@ final readonly class PublishReleaseHandler
             $levels[] = $entry;
         }
 
-        return new ContentSnapshot($chapters, $levels, $story->startNodeId());
+        $backdrop = $story->backdrop();
+
+        return new ContentSnapshot(
+            $chapters,
+            $levels,
+            $story->startNodeId(),
+            $backdrop === null ? null : (object) $backdrop->jsonSerialize(),
+        );
     }
 }

@@ -34,13 +34,13 @@ final class ContentGate
         $chapter = $content->chapters[0] ?? null;
 
         if ($chapter === null) {
-            return new ContentSnapshot([], []);
+            return new ContentSnapshot([], [], $content->startNodeId, $content->backdrop);
         }
 
         $firstNode = ($chapter->nodes ?? [])[0] ?? null;
 
         if ($firstNode === null) {
-            return new ContentSnapshot([$chapter], []);
+            return new ContentSnapshot([$chapter], [], $content->startNodeId, $content->backdrop);
         }
 
         $level = $content->level($firstNode->levelId);
@@ -48,6 +48,10 @@ final class ContentGate
         return new ContentSnapshot(
             [$this->firstChapterOnly($chapter)],
             $level === null ? [] : [$level],
+            // Отрезается содержимое, а не оформление: гость смотрит на ту же
+            // доску, что и все, — иначе первое, что он видит, пустой экран.
+            $content->startNodeId,
+            $content->backdrop,
         );
     }
 

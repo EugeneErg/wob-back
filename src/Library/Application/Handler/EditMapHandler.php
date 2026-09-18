@@ -32,6 +32,8 @@ final readonly class EditMapHandler
                 (string) $command->image,
                 (string) $command->outro,
             ),
+            "icon" => $story->chapter(new ChapterId((string) $command->chapterId))
+                ->setIcon((string) $command->image),
             "node" => $this->editNode($story, $command),
             "link" => $command->linked
                 ? $story->linkNodes(new NodeId((string) $command->from), new NodeId((string) $command->to))

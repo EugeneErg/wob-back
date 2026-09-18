@@ -78,7 +78,17 @@ final readonly class DatabaseReleaseRepository implements ReleaseRepository
             'story_id' => $storyUuid,
             'number' => $release->number,
             'content' => json_encode(
-                ['chapters' => $release->content->chapters, 'levels' => $release->content->levels],
+                [
+                    'chapters' => $release->content->chapters,
+                    'levels' => $release->content->levels,
+                    // Заморожено — значит записано. Начало и задник до сих пор
+                    // клались в снимок и не доезжали до строки: при следующем
+                    // чтении выпуск возвращался без них, и обе вещи жили только
+                    // тем, что читающий умел добрать их у живой истории. Автор
+                    // передвинул начало — и старый выпуск начинался уже оттуда.
+                    'startNodeId' => $release->content->startNodeId,
+                    'backdrop' => $release->content->backdrop,
+                ],
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
             ),
             'content_hash' => $release->contentHash,
@@ -107,7 +117,15 @@ final readonly class DatabaseReleaseRepository implements ReleaseRepository
             new ReleaseId($row->id),
             new StoryId((string) $storyPublicId),
             (int) $row->number,
-            new ContentSnapshot($content->chapters ?? [], $content->levels ?? []),
+            new ContentSnapshot(
+                $content->chapters ?? [],
+                $content->levels ?? [],
+                // Строки, записанные до того, как это стало попадать в JSON,
+                // приходят без них: выпуск начинается там же, где история, и
+                // доска у него та же. Переписывать их задним числом не за чем.
+                $content->startNodeId ?? null,
+                $content->backdrop ?? null,
+            ),
             $row->content_hash,
             $row->previous_release_id === null ? null : new ReleaseId($row->previous_release_id),
             new DateTimeImmutable($row->created_at),

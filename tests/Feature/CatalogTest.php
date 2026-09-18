@@ -86,9 +86,22 @@ final class CatalogTest extends TestCase
         $shipped = array_column($body['levels'], 'id');
         self::assertSame(['lvl-1-1'], $shipped);
 
+        // Сущностей в пакете истории нет ни у кого, и у гостя тоже: они едут
+        // с уровнем, когда его открывают. Здесь проверяется не это, а то, что
+        // гостю ОТДАННЫЙ уровень играбелен, а остальные — нет.
         foreach ($body['levels'] as $level) {
-            self::assertArrayHasKey('entities', $level);
+            self::assertArrayNotHasKey('entities', $level);
         }
+
+        // Открыть свой уровень гость может — иначе отдавать его незачем.
+        $this->getJson('/api/catalog/story-one/levels/lvl-1-1')
+            ->assertOk()
+            ->assertJsonPath('level.id', 'lvl-1-1');
+
+        // А соседний по карте — нет. Имя он на карте видит, содержимого не
+        // получает ни общим пакетом, ни отдельной ручкой: гейт, к которому
+        // есть второй путь, — не гейт.
+        $this->getJson('/api/catalog/story-one/levels/lvl-1-2')->assertStatus(404);
     }
 
     public function testAVisitorCannotReachTheSecondCanonicalStoryByGuessingItsId(): void

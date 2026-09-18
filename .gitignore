@@ -6,6 +6,11 @@
 /storage/framework/sessions/*
 /storage/framework/views/*
 /storage/logs/*
+# Залитые носители: их кладёт сюда сама заливка, и после первого же импорта
+# репозиторий показывает полторы тысячи «изменений», за которыми не видно
+# настоящих. Это данные, а не код.
+/storage/app/private/*
+/storage/app/public/*
 .env
 .env.backup
 .phpunit.result.cache

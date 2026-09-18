@@ -8,6 +8,7 @@ use Wob\Library\Domain\Event\StoryDeleted;
 use Wob\Library\Domain\Event\LevelsDiscarded;
 use Wob\Library\Domain\Service\ContentHasher;
 use Wob\Library\Domain\ValueObject\AssetId;
+use Wob\Library\Domain\ValueObject\Backdrop;
 use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\ContentHash;
 use Wob\Library\Domain\ValueObject\LevelId;
@@ -78,6 +79,18 @@ final class Story extends AggregateRoot
         // play rather than after it, which is what keeps a new player from
         // waiting twice over.
         private string $intro = '',
+
+        /*
+         * Картинка позади глав на доске.
+         *
+         * Не обложка: обложку растягивают под карточку в списке, а на заднике
+         * главы стоят — и стоят в его же единицах. В оригинале это планета с
+         * заголовком вокруг неё, а пять островов лежат по её ободу.
+         *
+         * Оформление, как обложка и заставка: в содержимое истории не входит и
+         * на её хеш не влияет. Перерисовал автор планету — играется то же самое.
+         */
+        private ?Backdrop $backdrop = null,
     ) {
         $this->rename($title);
 
@@ -183,6 +196,16 @@ final class Story extends AggregateRoot
         }
 
         $this->cover = $cover;
+    }
+
+    public function backdrop(): ?Backdrop
+    {
+        return $this->backdrop;
+    }
+
+    public function setBackdrop(?Backdrop $backdrop): void
+    {
+        $this->backdrop = $backdrop;
     }
 
     /** @param list<AssetId> $hot */

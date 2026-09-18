@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Wob\Publishing\Infrastructure\Persistence\Database;
 
 use Illuminate\Database\ConnectionInterface;
+use Wob\Library\Application\Query\AssetsForContent;
+use Wob\Library\Domain\Model\Asset;
 use Wob\Publishing\Application\Query\CatalogReadModel;
 use Wob\Publishing\Domain\Service\ContentGate;
 use Wob\Publishing\Domain\ValueObject\ContentSnapshot;
@@ -14,6 +16,7 @@ final readonly class DatabaseCatalogReadModel implements CatalogReadModel
     public function __construct(
         private ConnectionInterface $db,
         private ContentGate $gate,
+        private AssetsForContent $assets,
     ) {
     }
 
@@ -96,23 +99,16 @@ final readonly class DatabaseCatalogReadModel implements CatalogReadModel
             return null;
         }
 
-        $decoded = json_decode((string) $row->content, false, 512, JSON_THROW_ON_ERROR);
-        $content = new ContentSnapshot($decoded->chapters ?? [], $decoded->levels ?? []);
-
         // Signed out, only the first canonical story is on offer at all, and
-        // only a taste of it. Checked here rather than in the controller
-        // because the trimming and the eligibility are one decision: a gate
-        // that can be reached by a different route is not a gate.
+        // only a taste of it. Decided inside contentFor rather than here,
+        // because the trimming and the eligibility are one decision, and one
+        // decision belongs in one place: отдельная ручка уровня ходит тем же
+        // путём, а гейт, к которому есть второй путь, — не гейт.
         $preview = $playerId === null;
+        $content = $this->contentFor($storyId, $playerId);
 
-        if ($preview) {
-            $firstCanonical = $this->canon()[0] ?? null;
-
-            if ($firstCanonical === null || $firstCanonical['id'] !== $storyId) {
-                return null;
-            }
-
-            $content = $this->gate->forVisitor($content);
+        if ($content === null) {
+            return null;
         }
 
         return [
@@ -122,13 +118,117 @@ final readonly class DatabaseCatalogReadModel implements CatalogReadModel
             'version' => (int) $row->version,
             'hash' => $row->content_hash,
             'preview' => $preview,
+            // Картинка позади глав. Из выпуска, а не у живой истории: главы
+            // приезжают замороженными и стоят на заднике в его же единицах —
+            // взяв живой, мы положили бы острова мимо планеты.
+            'backdrop' => $content->backdrop,
             'chapters' => $content->chapters,
-            'levels' => $content->levels,
+            // Уровни едут БЕЗ сущностей, а сущности — когда уровень откроют.
+            //
+            // Замерено на наборе оригинала: весь пакет истории 1858 КБ, из них
+            // 1526 на сущности уровней и 264 на ассеты. Игроку перед картой
+            // нужны имена, размеры и хеши — десять килобайт. Он тянул в сто
+            // восемьдесят раз больше ради одного уровня, который откроет.
+            //
+            // Раньше так было нельзя: хеш главы считался по сущностям каждого
+            // её уровня. Теперь уровень несёт проштампованный хеш, и карта
+            // обходится им — см. `levelHash` на клиенте.
+            'levels' => array_map(self::withoutEntities(...), $content->levels),
             // Откуда начинать. Берётся из замороженного снимка, а у релизов,
             // нарезанных до его появления, — из самой истории: иначе игрок
             // открывает их и не знает, с чего начать.
             'startNodeId' => $content->startNodeId ?? $story->start_node_id ?? null,
         ];
+    }
+
+    public function level(string $storyId, string $levelId, ?string $playerId): ?array
+    {
+        $content = $this->contentFor($storyId, $playerId);
+
+        if ($content === null) {
+            return null;
+        }
+
+        $level = $content->level($levelId);
+
+        // Нет в обрезанном снимке — нет и ответа. Гостю отдаётся один уровень,
+        // и запертый уровень, приехавший по отдельной ручке, заперт ровно так
+        // же мало, как приехавший в общем пакете: сюда ведёт тот же путь и та
+        // же обрезка, иначе это была бы дверь в обход двери.
+        if ($level === null) {
+            return null;
+        }
+
+        return [
+            'level' => $level,
+            // Ассеты этого уровня — вместе с ним, а не отдельной справкой:
+            // уровень без них не показать, и второй круг между нажатием и
+            // первым кадром игрок заметит.
+            'assets' => array_map(
+                static fn (Asset $a): array => [
+                    'id' => $a->id->value,
+                    'title' => $a->title(),
+                    'types' => $a->types(),
+                    'entities' => $a->entities(),
+                ],
+                ($this->assets)([$level]),
+            ),
+        ];
+    }
+
+    /**
+     * Содержимое выпуска, как его вправе получить этот человек.
+     *
+     * Вынесено, потому что путь к содержимому один и тот же для всей истории и
+     * для одного уровня: та же играбельная версия, та же обрезка для гостя. Две
+     * копии этого пути означали бы два ответа на вопрос «что этому человеку
+     * можно», и разошлись бы они молча.
+     */
+    private function contentFor(string $storyId, ?string $playerId): ?ContentSnapshot
+    {
+        $story = $this->db->table('stories')
+            ->where('public_id', $storyId)
+            ->select(['id', 'public_id', 'title', 'canonical_release_id', 'start_node_id'])
+            ->first();
+
+        if ($story === null) {
+            return null;
+        }
+
+        $row = $this->playableRelease($story);
+
+        if ($row === null) {
+            return null;
+        }
+
+        $decoded = json_decode((string) $row->content, false, 512, JSON_THROW_ON_ERROR);
+        $content = new ContentSnapshot(
+            $decoded->chapters ?? [],
+            $decoded->levels ?? [],
+            $decoded->startNodeId ?? null,
+            $decoded->backdrop ?? null,
+        );
+
+        if ($playerId !== null) {
+            return $content;
+        }
+
+        $firstCanonical = $this->canon()[0] ?? null;
+
+        if ($firstCanonical === null || $firstCanonical['id'] !== $storyId) {
+            return null;
+        }
+
+        return $this->gate->forVisitor($content);
+    }
+
+    /** Уровень без сущностей: всё остальное при нём, включая штамп хеша. */
+    private static function withoutEntities(object $level): object
+    {
+        $light = clone $level;
+        unset($light->entities);
+
+        return $light;
     }
 
     /**

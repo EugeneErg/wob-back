@@ -43,4 +43,17 @@ interface CatalogReadModel
      * @return array<string, mixed>|null
      */
     public function play(string $storyId, ?string $playerId): ?array;
+
+    /**
+     * Один уровень со всем, что ему нужно, — когда его открывают.
+     *
+     * Отдельно от `play`, потому что это разные мгновения: карту смотрят до
+     * выбора, уровень берут после. Возит она и сущности, и ассеты этого
+     * уровня — без них его не показать.
+     *
+     * Null, если уровня нет или этому человеку он не полагается.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function level(string $storyId, string $levelId, ?string $playerId): ?array;
 }

@@ -68,6 +68,7 @@ final class PublishingServiceProvider extends ServiceProvider
             static fn (Container $c): CatalogReadModel => new DatabaseCatalogReadModel(
                 $c->make('db')->connection(),
                 $c->make(ContentGate::class),
+                $c->make(\Wob\Library\Application\Query\AssetsForContent::class),
             ),
         );
 

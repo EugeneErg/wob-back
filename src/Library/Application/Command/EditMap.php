@@ -61,6 +61,18 @@ final readonly class EditMap
         return new self($ownerId, $storyId, "node", $chapterId, $nodeId, $x, $y, $name, $note, $image, $outro);
     }
 
+    /**
+     * Картинка главы на доске истории.
+     *
+     * Отдельный вид, а не поле в `chapter`, потому что это другой жест автора.
+     * Переименовать главу и поставить ей значок — разные движения в разных
+     * местах, и слитые в один запрос они стирали бы друг друга.
+     */
+    public static function icon(string $ownerId, string $storyId, string $chapterId, string $icon): self
+    {
+        return new self($ownerId, $storyId, "icon", $chapterId, image: $icon);
+    }
+
     public static function link(string $ownerId, string $storyId, string $from, string $to, bool $linked): self
     {
         return new self($ownerId, $storyId, "link", from: $from, to: $to, linked: $linked);

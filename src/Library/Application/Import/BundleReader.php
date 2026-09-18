@@ -10,6 +10,8 @@ use Wob\Library\Domain\Model\Chapter;
 use Wob\Library\Domain\Model\Level;
 use Wob\Library\Domain\Model\Story;
 use Wob\Library\Domain\ValueObject\AssetId;
+use Wob\Library\Domain\ValueObject\Backdrop;
+use Wob\Library\Domain\ValueObject\CanvasRect;
 use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\Dimensions;
 use Wob\Library\Domain\ValueObject\EntityPlacement;
@@ -343,6 +345,16 @@ final readonly class BundleReader
             (string) ($raw->image ?? ''),
             $nodes,
             $this->assetIds($raw->hot ?? []),
+            (string) ($raw->map ?? ''),
+            // Место на доске истории и картинка там же.
+            //
+            // Без них глава приезжала на доску безымянным прямоугольником, и
+            // это было видно только глазами: файл нёс и то и другое, читатель
+            // молча их не брал, а новая глава вставала поверх соседней. Пустой
+            // прямоугольник остаётся тем, что бывает, когда места в файле нет,
+            // — но не тем, что бывает всегда.
+            self::rectOf($raw->canvas ?? null),
+            (string) ($raw->icon ?? ''),
         );
 
         return [$chapter, $warnings];
@@ -379,6 +391,10 @@ final readonly class BundleReader
                 $own,
                 $this->levelsUsedBy($own, $levels),
                 $this->assetIds($item->hot ?? []),
+                Story::NEW,
+                null,
+                (string) ($item->intro ?? ''),
+                self::backdropOf($item->backdrop ?? null),
             );
 
             // Файл приходит снаружи и не обязан быть делом рук редактора. Оба
@@ -519,6 +535,54 @@ final readonly class BundleReader
         }
 
         return array_values(array_filter($raw, static fn (mixed $i): bool => $i instanceof stdClass));
+    }
+
+    /**
+     * Задник из файла, если он там есть.
+     *
+     * Молча, как и рамка: задник — оформление, и кривой задник не стоит того,
+     * чтобы из-за него не доехала история.
+     */
+    private static function backdropOf(mixed $raw): ?Backdrop
+    {
+        $at = self::rectOf($raw);
+        $src = $raw instanceof stdClass ? trim((string) ($raw->src ?? '')) : '';
+
+        if ($at === null || $src === '') {
+            return null;
+        }
+
+        try {
+            return new Backdrop($src, $at);
+        } catch (InvariantViolation) {
+            return null;
+        }
+    }
+
+    /**
+     * Рамка из файла, если она там есть и её можно построить.
+     *
+     * Молча, а не отказом. Рамка — это расположение, а не содержимое: кривая
+     * рамка стоит главе места на доске, отказ стоит игроку всей истории. Автор
+     * увидит главу не там, где ждал, и передвинет её за секунду — а увидеть
+     * несостоявшийся импорт нельзя.
+     */
+    private static function rectOf(mixed $raw): ?CanvasRect
+    {
+        if (!$raw instanceof stdClass) {
+            return null;
+        }
+
+        try {
+            return new CanvasRect(
+                (float) ($raw->x ?? 0),
+                (float) ($raw->y ?? 0),
+                (float) ($raw->w ?? 0),
+                (float) ($raw->h ?? 0),
+            );
+        } catch (InvariantViolation) {
+            return null;
+        }
     }
 
     /** @return list<string> */

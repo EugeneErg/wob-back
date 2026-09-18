@@ -9,6 +9,7 @@ use Wob\Library\Domain\Model\Chapter;
 use Wob\Library\Domain\Model\Level;
 use Wob\Library\Domain\Model\Story;
 use Wob\Library\Domain\ValueObject\AssetId;
+use Wob\Library\Domain\ValueObject\Backdrop;
 use Wob\Library\Domain\ValueObject\ChapterId;
 use Wob\Library\Domain\ValueObject\Dimensions;
 use Wob\Library\Domain\ValueObject\EntityPlacement;
@@ -55,6 +56,9 @@ final class StoryMapper
             (int) $story->version,
             $story->start_node_id,
             (string) ($story->intro ?? ''),
+            // Строки, написанные до задника, приходят без него — и доска у них
+            // остаётся пустой, какой была.
+            Backdrop::fromRow($story),
         );
     }
 
@@ -88,6 +92,9 @@ final class StoryMapper
             $this->assetIds($row->hot),
             (string) ($row->map ?? ''),
             CanvasRect::fromRow($row),
+            // Строки, написанные до картинки на доске, приходят без неё — и
+            // остаются прямоугольниками, какими были.
+            (string) ($row->icon ?? ''),
         );
     }
 
@@ -119,6 +126,11 @@ final class StoryMapper
             "owner_id" => $story->ownerId->value,
             "title" => $story->title(),
             "cover" => $story->cover(),
+            "backdrop" => $story->backdrop()?->src ?? '',
+            "backdrop_x" => $story->backdrop()?->at->x ?? 0.0,
+            "backdrop_y" => $story->backdrop()?->at->y ?? 0.0,
+            "backdrop_w" => $story->backdrop()?->at->w ?? 0.0,
+            "backdrop_h" => $story->backdrop()?->at->h ?? 0.0,
             "start_node_id" => $story->startNodeId(),
             "intro" => $story->intro(),
             "hot" => $this->encode(array_map(static fn (AssetId $a): string => $a->value, $story->hot())),
@@ -167,6 +179,7 @@ final class StoryMapper
             "canvas_y" => $chapter->canvas()->y,
             "canvas_w" => $chapter->canvas()->w,
             "canvas_h" => $chapter->canvas()->h,
+            "icon" => $chapter->icon(),
             "nodes" => $this->encode($nodes),
             "hot" => $this->encode(array_map(static fn (AssetId $a): string => $a->value, $chapter->hot())),
             "position" => $position,
